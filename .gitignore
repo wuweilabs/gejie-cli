@@ -5,3 +5,8 @@ downloads/
 gejiec
 gejie
 gejie/csv_files/
+csv_files/
+
+.env
+
+.private-notes.md

@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/zshanhui/gejiezhipin/utils"
 )
 
 type CurrencyRate float32
@@ -40,21 +42,21 @@ func CreateMeliProductCsv(products []MeliProduct, baseFilename string) error {
 	// Write CSV header
 	header := []string{
 		"Title",
-		"Original Price Amount",
-		"USD Price Amount",
+		"Local currency amount",
+		"USD amount",
 		"URL",
-		"Review Count",
+		"Review count",
 		"Rating",
-		"Minimum Sold",
-		"Minimum Revenue",
-		"Description Content",
-		"Store Name",
-		"Store URL",
+		"Minimum sold",
+		"Minimum revenue",
+		"Description content",
+		"Store name",
+		"Store url",
 	}
 	headerChinese := []string{
 		"标题",
-		"原始价格",
-		"USD价格",
+		"本地货币价格",
+		"美元价格",
 		"链接",
 		"评论数",
 		"评分",
@@ -89,14 +91,17 @@ func CreateMeliProductCsv(products []MeliProduct, baseFilename string) error {
 		}
 
 		amountDecimal := float32(product.Price.AmountCents) / 100
-		originalCurrencyAmount := fmt.Sprintf("%s %f", product.Price.AmountCurrency, amountDecimal)
+		oCurrencyAmount := fmt.Sprintf("%s %f",
+			utils.CurrencyCodeToAbbrev(product.Price.CurrencyCode),
+			amountDecimal)
 		//  only Peruvian Soles is supported for now
-		usdPriceAmount := fmt.Sprintf("%s %f", currencyAbbrevUnitedStatesDollar, amountDecimal*float32(PeruvianSolUsdRate))
+		usdPriceAmount := fmt.Sprintf("%s %f",
+			utils.CurrencyAbbrevUnitedStatesDollar, amountDecimal*float32(PeruvianSolUsdRate))
 		usdMinimumRevenue := fmt.Sprintf("US$ %f", amountDecimal*float32(PeruvianSolUsdRate))
 
 		row := []string{
 			product.Title,
-			originalCurrencyAmount,
+			oCurrencyAmount,
 			usdPriceAmount,
 			product.Url,
 			reviewCount,

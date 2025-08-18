@@ -1,40 +1,21 @@
 package gejie
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/playwright-community/playwright-go"
+	"github.com/zshanhui/gejiezhipin/utils"
 )
-
-const exampleMercadoLibreXiaoMi15 = "https://listado.mercadolibre.com.pe/xiaomi-15"
-const exampleMercadoLibreKeyboard = "https://listado.mercadolibre.com.pe/teclado-mecanico"
-
-type CurrencyCode string
-type CurrencyAbbrev string
-
-const (
-	currencyCodePeruvianSoles        CurrencyCode   = "PEN"
-	currencyAbbrevPeruvianSoles      CurrencyAbbrev = "S/"
-	currencyCodeMexicanPeso          CurrencyCode   = " MXN"
-	currencyAbbrevMexicanPeso        CurrencyAbbrev = " Mex$"
-	currencyCodeUnitedStatesDollar   CurrencyCode   = "USD"
-	currencyAbbrevUnitedStatesDollar CurrencyAbbrev = "US$"
-	currencyCodeChineseYuan          CurrencyCode   = "CNY"
-	currencyAbbrevChineseYuan        CurrencyAbbrev = "CN¥"
-)
-
-const productLinksSelector = ".ui-search-main--only-products div.poly-card__content > h3 > a"
-
-// #root-app > div > div.ui-search-main.ui-search-main--without-header.ui-search-main--only-products > section > div:nth-child(5) > ol > li:nth-child(3) > div > div > div > div.poly-card__content > h3 > a
 
 type Price struct {
-	AmountCents    int    // 99990
-	AmountCurrency string // S/
+	AmountCents  int
+	CurrencyCode utils.CurrencyCode
 }
 
 type MeliProduct struct {
@@ -46,7 +27,6 @@ type MeliProduct struct {
 	ImageUrls          []string
 	SoldMoreThan       *uint32
 	DescriptionContent string
-	Images             []string
 	StoreInfo          MeliStoreInfo
 }
 
@@ -69,15 +49,19 @@ type BrowserOptions struct {
 	BlockMedia  bool
 	BlockFonts  bool
 	UserAgent   string
+	Timeout     float64
 }
+
+const browserHeadlessMode = false
 
 func DefaultBrowserOptions() *BrowserOptions {
 	return &BrowserOptions{
-		Headless:    false,
+		Headless:    browserHeadlessMode,
 		BlockImages: true,
 		BlockMedia:  true,
 		BlockFonts:  true,
 		UserAgent:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		Timeout:     15000,
 	}
 }
 
@@ -94,6 +78,7 @@ func NewBrowserManager(opts *BrowserOptions) (*BrowserManager, error) {
 
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
 		Headless: playwright.Bool(opts.Headless),
+		Timeout:  playwright.Float(opts.Timeout),
 	})
 	if err != nil {
 		pw.Stop()
@@ -170,7 +155,7 @@ func (bm *BrowserManager) GetBrowser() playwright.Browser {
 	return bm.browser
 }
 
-func RunMeliSearch(searchUrl *string, maxItemsInput int8) {
+func RunMeliSearch(searchUrl *string, maxItemsInput int8, createCsv bool) []MeliProduct {
 	if searchUrl == nil {
 		defaultUrl := exampleMercadoLibreKeyboard
 		searchUrl = &defaultUrl
@@ -182,7 +167,7 @@ func RunMeliSearch(searchUrl *string, maxItemsInput int8) {
 	defer pw.Stop()
 
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false),
+		Headless: playwright.Bool(browserHeadlessMode),
 	})
 	if err != nil {
 		log.Fatalf("could not launch browser: %v", err)
@@ -222,75 +207,48 @@ func RunMeliSearch(searchUrl *string, maxItemsInput int8) {
 	}
 
 	// Wait just for product links to appear instead of network idle
-	pageIndex.Locator(productLinksSelector).WaitFor(playwright.LocatorWaitForOptions{
+	err = pageIndex.Locator(productLinksSelector).WaitFor(playwright.LocatorWaitForOptions{
 		State: playwright.WaitForSelectorStateAttached,
 	})
 	if err != nil {
 		log.Fatalf("product links did not appear: %v", err)
+		pageIndex.Close()
 	}
 
 	fmt.Print("page loaded, proceeding to scrape links")
 
-	productLinks := ScrapeAllProductLinks(pageIndex)
-	fmt.Print("\n\n")
-	for _, url := range productLinks {
-		fmt.Println(url)
-	}
-	// fmt.Printf("total product links: %d", len(productLinks))
-
-	// urlFrontier := NewURLFrontier()
-	// products := []MeliProduct{}
-
-	// TODO
-	// 1. scrape product page
-	// 2. scrape all product list pages for links
-	// 3. package as easy to use cli tool
-
-	// create another page/tab to scrape products
-	pageProducts, err := context.NewPage()
-	if err != nil {
-		log.Fatalf("could not create page: %v", err)
-	}
-	defer pageIndex.Close()
+	productLinks := ScrapeProductLinksWithPagination(pageIndex, int(maxItemsInput))
+	fmt.Printf("\ntotal product links scraped: %d\n", len(productLinks))
 
 	scrapeProducts := []MeliProduct{}
-	maxItems := len(productLinks)
-	if maxItemsInput > 0 {
-		maxItems = int(maxItemsInput)
-	}
-	for i, url := range productLinks {
-		if i >= maxItems {
-			break
-		}
-		product := ScrapeProductPage(pageProducts, url)
+	for _, url := range productLinks {
+		product := scrapeProductPage(browser, url)
 		if product != nil {
-			productJson, err := json.MarshalIndent(product, "", "  ")
-			if err != nil {
-				log.Printf("failed to marshal product: %v", err)
-			} else {
-				log.Println("\n\nscraped product:\n", string(productJson))
-			}
 			scrapeProducts = append(scrapeProducts, *product)
 		} else {
 			fmt.Print("product is nil")
 		}
 	}
-
-	fmt.Printf("total meli products scraped: %d", len(scrapeProducts))
+	fmt.Printf("total meli products scraped: %d\n\n", len(scrapeProducts))
 
 	searchUrlParsed, _ := url.Parse(*searchUrl)
-	fmt.Printf("searchUrl path: %s\n", searchUrlParsed.Path)
+	// fmt.Printf("searchUrl path: %s\n", searchUrlParsed.Path)
 	if len(searchUrlParsed.Path) > 0 && searchUrlParsed.Path[0] == '/' {
 		searchUrlParsed.Path = searchUrlParsed.Path[1:]
 	}
 
-	CreateMeliProductCsv(scrapeProducts, searchUrlParsed.Path)
+	if createCsv {
+		fmt.Printf("creating csv for %s, number of products: %d\n", searchUrlParsed.Path, len(scrapeProducts))
+		CreateMeliProductCsv(scrapeProducts, searchUrlParsed.Path)
+	}
+
+	return scrapeProducts
 }
 
-func ScrapeAllProductLinks(page playwright.Page) []string {
+func ScrapeSinglePageProductLinks(page playwright.Page) ([]string, error) {
 	productLinks, err := page.Locator(productLinksSelector).All()
 	if err != nil {
-		log.Fatalf("could not extract product links")
+		return []string{}, fmt.Errorf("could not extract product links: %w", err)
 	}
 
 	productLinkUrls := []string{}
@@ -323,100 +281,263 @@ func ScrapeAllProductLinks(page playwright.Page) []string {
 		productLinkUrls = append(productLinkUrls, abs.String())
 	}
 
-	return productLinkUrls
+	return productLinkUrls, nil
 }
 
-func ScrapeProductPage(page playwright.Page, url string) *MeliProduct {
-	if page == nil {
-		// create a new page
+func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []string {
+	allProductLinks := []string{}
+	currentPage := 1
+
+	for len(allProductLinks) < maxItems {
+		fmt.Printf("scraping page %d...\n", currentPage)
+
+		curPageProductLinks, err := ScrapeSinglePageProductLinks(page)
+		if err != nil {
+			fmt.Printf("error scraping product links: %v", err)
+			return []string{}
+		}
+		fmt.Printf("found %d product links on page %d\n", len(curPageProductLinks), currentPage)
+
+		remainingItems := maxItems - len(allProductLinks)
+		if len(curPageProductLinks) <= remainingItems {
+			allProductLinks = append(allProductLinks, curPageProductLinks...)
+		} else {
+			allProductLinks = append(allProductLinks, curPageProductLinks[:remainingItems]...)
+		}
+
+		if len(allProductLinks) >= maxItems {
+			fmt.Printf("reached max items (%d), stopping pagination\n", maxItems)
+			break
+		}
+
+		// next page
+		nextButton := page.Locator(string(paginationNextButtonSelector))
+		nextExists, err := nextButton.Count()
+		if err != nil {
+			log.Printf("error checking next page button: %v", err)
+			break
+		}
+		if nextExists == 0 {
+			fmt.Printf("no more pages available, stopping pagination")
+			break
+		}
+
+		// click next button
+		err = nextButton.Click()
+		if err != nil {
+			log.Printf("error clicking next page button: %w", err)
+			break
+		}
+
+		err = page.Locator(string(productLinksSelector)).Last().WaitFor(playwright.LocatorWaitForOptions{
+			State:   playwright.WaitForSelectorStateAttached,
+			Timeout: playwright.Float(5000),
+		})
+		if err != nil {
+			log.Printf("error waiting for next page to load: %v", err)
+			break
+		}
+
+		// Sleep for 1 second between pages
+		time.Sleep(time.Duration(1+rand.Intn(3)) * time.Second)
+		currentPage++
 	}
-	defaultTimeout := float64(5000)
-	nameSelector := "h1.ui-pdp-title"
-	priceBoxSelector := "#price > div > div.ui-pdp-price__main-container > div.ui-pdp-price__second-line > span > span"
-	priceCurrencySelector := ".andes-money-amount__currency-symbol"
-	priceAmountFractionSelector := ".andes-money-amount__fraction"
-	priceAmountCentSelector := ".andes-money-amount__cents"
 
-	reviewsContainer := page.Locator("div.ui-pdp-header__info > a")
+	fmt.Printf("total products links scraped across %d pages: %d\n", currentPage, len(allProductLinks))
+	return allProductLinks
+}
 
-	fmt.Printf("visiting product url: %s", url)
-	page.Goto(url, playwright.PageGotoOptions{
-		Timeout: playwright.Float(defaultTimeout),
+func ScrapeProductPageDirect(url string) *MeliProduct {
+	bm, err := NewBrowserManager(&BrowserOptions{
+		Headless:    false,
+		BlockImages: false,
+		BlockMedia:  false,
+		BlockFonts:  false,
 	})
+	if err != nil {
+		fmt.Printf("could not create browser manager: %v", err)
+	}
+	return scrapeProductPage(bm.browser, url)
+}
 
+func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
+	var productPage playwright.Page
+	defaultTimeout := float64(8000)
+
+	// create new context allowing media/images to load
+	context, err := browser.NewContext()
+	if err != nil {
+		log.Fatalf("could not create context: %v", err)
+	}
+	defer context.Close()
+
+	productPage, err = context.NewPage()
+	if err != nil {
+		log.Fatalf("could not create page: %v", err)
+	}
+	defer productPage.Close()
+
+	_, err = productPage.Goto(url, playwright.PageGotoOptions{
+		Timeout: &defaultTimeout,
+	})
+	if err != nil {
+		log.Fatalf("could not goto url: %v", err)
+	}
+
+	reviewsContainer := productPage.Locator(string(reviewsContainerSelector))
 	ratingCount := ""
 	ratingScore := ""
 	soldCount := uint32(0)
-	// Wait for the reviews container to be visible after page navigation
-	err := reviewsContainer.WaitFor(playwright.LocatorWaitForOptions{
-		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(defaultTimeout),
-	})
+
+	// Check if reviews container exists without waiting
+	reviewsContainerExists, err := reviewsContainer.Count()
 	if err != nil {
-		log.Printf("reviews container not found or not visible: %v", err)
-		// Continue with empty values if reviews container is not available
+		log.Printf("error checking reviews container count: %v", err)
+		reviewsContainerExists = 0
+	}
+	if reviewsContainerExists > 0 {
+		// Only wait for visibility if the container exists
+		err = reviewsContainer.WaitFor(playwright.LocatorWaitForOptions{
+			State:   playwright.WaitForSelectorStateVisible,
+			Timeout: playwright.Float(defaultTimeout),
+		})
+		if err != nil {
+			log.Printf("reviews container not visible after waiting: %v", err)
+			// Continue with empty values if reviews container is not visible
+		} else {
+			reviewRating := reviewsContainer.Locator(string(reviewsRatingSelector))
+			reviewCount := reviewsContainer.Locator(string(reviewsCountSelector))
+
+			ratingCount, err = reviewCount.First().TextContent()
+			if err != nil {
+				ratingCount = ""
+			}
+			// Clean the review count by removing parentheses, e.g., "(5)" -> "5"
+			ratingCount = cleanReviewCount(ratingCount)
+			ratingScore, err = reviewRating.First().TextContent()
+			if err != nil {
+				ratingScore = ""
+			}
+			soldCount = scrapeSoldCount(productPage)
+		}
 	} else {
-		reviewRating := reviewsContainer.Locator("span.ui-pdp-review__rating")
-		reviewCount := reviewsContainer.Locator("span.ui-pdp-review__amount")
-
-		ratingCount, err = reviewCount.First().TextContent()
-		if err != nil {
-			ratingCount = ""
-		}
-		// Clean the review count by removing parentheses, e.g., "(5)" -> "5"
-		ratingCount = cleanReviewCount(ratingCount)
-		ratingScore, err = reviewRating.First().TextContent()
-		if err != nil {
-			ratingScore = ""
-		}
-		soldCount = scrapeSoldCount(page)
+		log.Printf("reviews container not found on page, continuing with empty values")
+		// Set default values when no reviews container exists
+		ratingCount = ""
+		ratingScore = ""
+		soldCount = 0
 	}
 
-	name, err := page.Locator(nameSelector).First().TextContent()
-	if err != nil {
-		log.Fatalf("name not founded")
+	productName := ""
+	nameCount, err := productPage.Locator(string(nameSelector)).Count()
+	if nameCount == 0 || err != nil {
+		log.Print("product name not found, product page not found")
 		return nil
+	} else {
+		productName, err = productPage.Locator(string(nameSelector)).First().TextContent()
+		if err != nil {
+			log.Print("productName text not founded")
+			return nil
+		}
 	}
 
-	priceBox := page.Locator(priceBoxSelector).First()
-	currencyAbbrev, err := priceBox.Locator(priceCurrencySelector).First().TextContent()
-	if err != nil {
-		log.Fatalf("currency not founded")
-		return nil
-	}
-	amount, err := priceBox.Locator(priceAmountFractionSelector).First().TextContent()
+	pageUrl := productPage.URL()
+	curCode := utils.DomainToCurrencyCode(utils.Domain(pageUrl))
+
+	amount, err := productPage.Locator(string(priceAmountFractionSelector)).First().TextContent()
 	if err != nil {
 		log.Fatalf("amount whole not founded")
 		return nil
 	}
-	fmt.Printf("amount whole found: %s %s\n", currencyAbbrev, amount)
 
-	// handle amount cents scrape, not always available
-	amountCentsElem := priceBox.Locator(priceAmountCentSelector).First()
-	amountCentsInt := parseCents(amountCentsElem)
-	amountInt := standardizeAmount(amount, CurrencyAbbrev(currencyAbbrev))
+	// amount cent is not always available to scrape
+	var amountCentsElem playwright.Locator = nil
+	centCount, err := productPage.Locator(string(priceAmountCentSelector)).Count()
+	if err != nil {
+		log.Fatalf("failed to scrape cent count")
+		centCount = 0
+	}
+	if centCount > 0 {
+		amountCentsElem = productPage.Locator(string(priceAmountCentSelector)).First()
+	} else {
+		fmt.Printf("amount cent not found, continuing with 0\n")
+	}
+
+	var amountCentsInt = 0
+	if amountCentsElem != nil {
+		amountCentsInt = parseCents(amountCentsElem)
+	}
+
+	amountInt := utils.StandardizeAmountCents(amount, "")
 	fmt.Printf("amount cents parsed: %d, amount whole parsed: %d\n", amountCentsInt, amountInt)
 
-	storeInfo := scrapeStoreInfo(page)
-	fmt.Printf("store info: %v", storeInfo)
+	storeInfo := scrapeStoreInfo(productPage)
+
+	images := ScrapeProductImages(productPage, url)
+	fmt.Printf("total product images scraped: %d - first image src: %s\n", len(images), images[0])
 
 	product := MeliProduct{
-		Title: name,
+		Title: productName,
 		Price: Price{
-			AmountCents:    amountInt + amountCentsInt,
-			AmountCurrency: currencyAbbrev,
+			AmountCents:  amountInt + amountCentsInt,
+			CurrencyCode: curCode,
 		},
 		// to be filled in later
 		Url:                url,
 		ReviewCount:        convertStrUint32(ratingCount),
 		Rating:             convertStrToFloat32(ratingScore),
-		ImageUrls:          []string{},
+		ImageUrls:          images,
 		SoldMoreThan:       &soldCount,
 		StoreInfo:          storeInfo,
 		DescriptionContent: "",
 	}
 
 	return &product
+}
+
+func ScrapeProductImages(page playwright.Page, url string) []string {
+	var productPage playwright.Page
+	if page == nil {
+		// direct scrape from url
+		opts := DefaultBrowserOptions()
+		opts.BlockImages = false
+		opts.BlockMedia = false
+		opts.BlockFonts = false
+		bm, err := NewBrowserManager(opts)
+		if err != nil {
+			log.Fatalf("could not create browser manager: %v", err)
+		}
+		defer bm.Close()
+		productPage, err = bm.NewPage()
+		if err != nil {
+			log.Fatalf("could not create page: %v", err)
+		}
+		defer bm.ClosePage(productPage)
+		_, err = productPage.Goto(url, playwright.PageGotoOptions{
+			Timeout: playwright.Float(opts.Timeout),
+		})
+		if err != nil {
+			log.Fatalf("could not goto url: %v", err)
+		}
+		defer bm.ClosePage(productPage)
+	} else {
+		productPage = page
+	}
+
+	images, err := productPage.Locator(string(productImagesSelector)).All()
+	if err != nil {
+		log.Fatalf("could not extract product images")
+	}
+
+	imageUrls := []string{}
+	for _, im := range images {
+		imageSrc, err := im.GetAttribute("src")
+		if err != nil {
+			log.Fatalf("could not extract product image url")
+		}
+		imageUrls = append(imageUrls, imageSrc)
+	}
+	return imageUrls
 }
 
 func scrapeSoldCount(page playwright.Page) uint32 {
@@ -431,38 +552,35 @@ func scrapeSoldCount(page playwright.Page) uint32 {
 }
 
 func scrapeStoreInfo(page playwright.Page) MeliStoreInfo {
-	storeNameElem := page.Locator("div.ui-seller-data-header__title-container > h2").First()
+	storeNameElem := page.Locator(string(storeNameSelector)).First()
 	storeName, err := storeNameElem.TextContent()
 	if err != nil {
 		fmt.Printf("failed to scrape store name: %v", err)
 	}
-	storeUrlElem := page.Locator("div.ui-seller-data-footer__container > a").First()
+	storeUrlElem := page.Locator(string(storeUrlSelector)).First()
 	storeUrl, err := storeUrlElem.GetAttribute("href")
 	if err != nil {
 		fmt.Printf("failed to scrape store url: %v", err)
 		storeUrl = ""
 	}
 	storeUrl = parseUrlBase(storeUrl)
-
-	storeLogoImageSrcOriginal, err := page.Locator("div.ui-seller-data-header__logo-container > a > div > div > img").First().GetAttribute("src")
+	storeLogoImageCount, err := page.Locator(string(storeLogoImageSelector)).Count()
 	if err != nil {
-		fmt.Printf("failed to scrape store logo image src: %v", err)
-		storeLogoImageSrcOriginal = ""
+		fmt.Printf("failed to scrape store logo image does not exist: %v", err)
+		storeLogoImageCount = 0
 	}
-	// https://www.mercadolibre.com.pe/pagina/negociacionesrepresentaciones
-	// item_id=MPE715006378
-	// category_id=MPE418448
-	// seller_id=833259187
-	// client=recoview-selleritems
-	// recos_listing=true#origin=pdp
-	// &component=sellerData
-	// &typeSeller=eshop
-
+	imageSrc := ""
+	if storeLogoImageCount > 0 {
+		imageSrc, err = page.Locator(string(storeLogoImageSelector)).First().GetAttribute("data-src")
+		if err != nil {
+			fmt.Printf("failed to scrape store logo image src: %v", err)
+			imageSrc = ""
+		}
+	}
 	return MeliStoreInfo{
 		Name:                 storeName,
 		Url:                  storeUrl,
-		LogoImageSrcOriginal: storeLogoImageSrcOriginal,
-		LogoImageSrc:         "",
+		LogoImageSrcOriginal: imageSrc,
 	}
 }
 
@@ -480,53 +598,6 @@ func parseUrlBase(s string) string {
 	}
 	simpleUrl := parsedUrl.Scheme + "://" + parsedUrl.Host + parsedUrl.Path
 	return simpleUrl
-}
-
-// Converts a currency abbreviation (e.g., "S/") to its currency code (e.g., "PEN")
-func CurrencyAbbrevToCode(abbrev CurrencyAbbrev) CurrencyCode {
-	switch abbrev {
-	case currencyAbbrevPeruvianSoles:
-		return currencyCodePeruvianSoles
-	case currencyAbbrevMexicanPeso:
-		return currencyCodeMexicanPeso
-	case currencyAbbrevUnitedStatesDollar:
-		return currencyCodeUnitedStatesDollar
-	case currencyAbbrevChineseYuan:
-		return currencyCodeChineseYuan
-	default:
-		return ""
-	}
-}
-
-// Converts a currency code (e.g., "PEN") to its abbreviation (e.g., "S/")
-func CurrencyCodeToAbbrev(code CurrencyCode) CurrencyAbbrev {
-	switch code {
-	case currencyCodePeruvianSoles:
-		return currencyAbbrevPeruvianSoles
-	case currencyCodeMexicanPeso:
-		return currencyAbbrevMexicanPeso
-	case currencyCodeUnitedStatesDollar:
-		return currencyAbbrevUnitedStatesDollar
-	case currencyCodeChineseYuan:
-		return currencyAbbrevChineseYuan
-	default:
-		return ""
-	}
-}
-
-func standardizeAmount(amount string, currency CurrencyAbbrev) int {
-	if currency == currencyAbbrevPeruvianSoles {
-		// In Peruvian Soles, amounts use a decimal point as thousands separator, e.g. "1.234" means 1234.
-		// Remove all decimal points before parsing to int.
-		amount = strings.ReplaceAll(amount, ".", "")
-		amountInt, err := strconv.Atoi(amount)
-		if err != nil {
-			log.Fatalf("failed to parse amount to int: %v", err)
-			return 0
-		}
-		return amountInt * 100
-	}
-	return 0
 }
 
 func parseCents(amountCentsElem playwright.Locator) int {
@@ -585,7 +656,6 @@ func convertStrUint32(s string) *uint32 {
 
 // Helper function to parse sold count from string like "Nuevo  |  +100 vendidos"
 func parseSoldCount(s string) uint32 {
-	fmt.Printf("sold text: ^%s^", s)
 	parts := strings.Split(s, "|")
 	if len(parts) > 1 {
 		soldPart := strings.TrimSpace(parts[1])
