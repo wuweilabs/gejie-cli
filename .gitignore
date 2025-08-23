@@ -9,4 +9,5 @@ csv_files/
 
 .env
 
-.private-notes.md
+.dev-product-notes.md
+tutorials/

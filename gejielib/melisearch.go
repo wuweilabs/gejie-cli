@@ -52,21 +52,48 @@ type BrowserOptions struct {
 	Timeout     float64
 }
 
-const browserHeadlessMode = false
+var gejieConfig = DefaultGejieConfig()
 
 func DefaultBrowserOptions() *BrowserOptions {
 	return &BrowserOptions{
-		Headless:    browserHeadlessMode,
+		Headless:    gejieConfig.BrowserHeadlessMode,
 		BlockImages: true,
 		BlockMedia:  true,
 		BlockFonts:  true,
-		UserAgent:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-		Timeout:     15000,
+		UserAgent:   UserAgentChrome,
+		// UserAgent:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		Timeout: 15000,
 	}
 }
 
-func NewBrowserManager(opts *BrowserOptions) (*BrowserManager, error) {
+func createBrowser(pw *playwright.Playwright, opts *BrowserOptions) (playwright.Browser, error) {
+	var browser playwright.Browser
+	var err error
+	launchOpts := playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(opts.Headless),
+		Timeout:  playwright.Float(opts.Timeout),
+		Args: []string{
+			string(disableBlinkFeaturesAutomationControlled),
+			string(noSandbox),
+		},
+	}
+	if gejieConfig.BrowserType == BrowserTypeFirefox {
+		browser, err = pw.Firefox.Launch(launchOpts)
+		if err != nil {
+			return nil, err
+		}
+	} else if gejieConfig.BrowserType == BrowserTypeChromium {
+		browser, err = pw.Chromium.Launch(launchOpts)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, fmt.Errorf("browser type not supported: %s", gejieConfig.BrowserType)
+	}
+	return browser, nil
+}
 
+func NewBrowserManager(opts *BrowserOptions) (*BrowserManager, error) {
 	if opts == nil {
 		opts = DefaultBrowserOptions()
 	}
@@ -76,20 +103,17 @@ func NewBrowserManager(opts *BrowserOptions) (*BrowserManager, error) {
 		return nil, err
 	}
 
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(opts.Headless),
-		Timeout:  playwright.Float(opts.Timeout),
-	})
+	newBrowser, err := createBrowser(pw, opts)
 	if err != nil {
 		pw.Stop()
 		return nil, err
 	}
 
-	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
+	context, err := newBrowser.NewContext(playwright.BrowserNewContextOptions{
 		UserAgent: playwright.String(opts.UserAgent),
 	})
 	if err != nil {
-		browser.Close()
+		newBrowser.Close()
 		pw.Stop()
 		return nil, err
 	}
@@ -120,7 +144,7 @@ func NewBrowserManager(opts *BrowserOptions) (*BrowserManager, error) {
 
 	return &BrowserManager{
 		pw:      pw,
-		browser: browser,
+		browser: newBrowser,
 		context: context,
 	}, nil
 }
@@ -166,9 +190,7 @@ func RunMeliSearch(searchUrl *string, maxItemsInput int8, createCsv bool) []Meli
 	}
 	defer pw.Stop()
 
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(browserHeadlessMode),
-	})
+	browser, err := createBrowser(pw, DefaultBrowserOptions())
 	if err != nil {
 		log.Fatalf("could not launch browser: %v", err)
 	}
@@ -206,15 +228,6 @@ func RunMeliSearch(searchUrl *string, maxItemsInput int8, createCsv bool) []Meli
 		log.Fatalf("failed to navigate: %v", err)
 	}
 
-	// Wait just for product links to appear instead of network idle
-	err = pageIndex.Locator(productLinksSelector).WaitFor(playwright.LocatorWaitForOptions{
-		State: playwright.WaitForSelectorStateAttached,
-	})
-	if err != nil {
-		log.Fatalf("product links did not appear: %v", err)
-		pageIndex.Close()
-	}
-
 	fmt.Print("page loaded, proceeding to scrape links")
 
 	productLinks := ScrapeProductLinksWithPagination(pageIndex, int(maxItemsInput))
@@ -230,6 +243,8 @@ func RunMeliSearch(searchUrl *string, maxItemsInput int8, createCsv bool) []Meli
 		}
 	}
 	fmt.Printf("total meli products scraped: %d\n\n", len(scrapeProducts))
+	fmt.Printf("first product scraped: \n")
+	utils.PrintProduct(scrapeProducts[0])
 
 	searchUrlParsed, _ := url.Parse(*searchUrl)
 	// fmt.Printf("searchUrl path: %s\n", searchUrlParsed.Path)
@@ -349,7 +364,7 @@ func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []stri
 
 func ScrapeProductPageDirect(url string) *MeliProduct {
 	bm, err := NewBrowserManager(&BrowserOptions{
-		Headless:    false,
+		Headless:    gejieConfig.BrowserHeadlessMode,
 		BlockImages: false,
 		BlockMedia:  false,
 		BlockFonts:  false,
@@ -362,7 +377,7 @@ func ScrapeProductPageDirect(url string) *MeliProduct {
 
 func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
 	var productPage playwright.Page
-	defaultTimeout := float64(8000)
+	defaultTimeout := float64(gejieConfig.BrowserTimeout)
 
 	// create new context allowing media/images to load
 	context, err := browser.NewContext()

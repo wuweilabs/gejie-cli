@@ -46,6 +46,7 @@ func routeMeliUrl(url string, maxItems int, onlyImages bool, createCsv bool) {
 		}
 	}
 
+	// ./gejiec meli --url https://articulo.mercadolibre.com.mx/MLM-1411526559-silla-gamer-reclinable-giratoria-ergonomica-super-comoda-_JM
 	if isProductUrl {
 		if onlyImages {
 			fmt.Printf("\nscraping only product images: %s", url)
@@ -61,12 +62,10 @@ func routeMeliUrl(url string, maxItems int, onlyImages bool, createCsv bool) {
 		product := gejie.ScrapeProductPageDirect(url)
 		utils.PrintProduct(product)
 
+		// ./gejiec meli --url https://listado.mercadolibre.com.mx/carburador-stihl --max-items 5 --create-csv
 	} else if isListUrl {
 		fmt.Printf("\nscraping list url: %s", url)
-		products := gejie.RunMeliSearch(&url, int8(maxItems), createCsv)
-		for _, product := range products {
-			utils.PrintProduct(&product)
-		}
+		gejie.RunMeliSearch(&url, int8(maxItems), createCsv)
 
 	} else {
 		fmt.Printf("url is not a valid meli, url: %s", url)
