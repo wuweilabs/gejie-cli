@@ -11,6 +11,8 @@ const productImagesSelector CssSelector = ".ui-pdp-gallery__figure__image"
 const productLinksSelector = ".ui-search-main--only-products div.poly-card__content > h3 > a"
 const nameSelector CssSelector = "h1.ui-pdp-title"
 
+const minimumSoldCountSelector CssSelector = "div.ui-pdp-header__subtitle > span.ui-pdp-subtitle"
+
 const priceBoxSelector CssSelector = "#price > div > div.ui-pdp-price__main-container > div.ui-pdp-price__second-line > span > span"
 
 const priceCurrencySelector CssSelector = priceBoxSelector + " .andes-money-amount__currency-symbol"

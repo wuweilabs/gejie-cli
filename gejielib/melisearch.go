@@ -26,6 +26,7 @@ type MeliProduct struct {
 	Rating             *float32
 	ImageUrls          []string
 	SoldMoreThan       *uint32
+	EstimatedSoldCount *uint32
 	DescriptionContent string
 	StoreInfo          MeliStoreInfo
 }
@@ -402,7 +403,7 @@ func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
 	reviewsContainer := productPage.Locator(string(reviewsContainerSelector))
 	ratingCount := ""
 	ratingScore := ""
-	soldCount := uint32(0)
+	var soldCount *uint32
 
 	// Check if reviews container exists without waiting
 	reviewsContainerExists, err := reviewsContainer.Count()
@@ -440,7 +441,7 @@ func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
 		// Set default values when no reviews container exists
 		ratingCount = ""
 		ratingScore = ""
-		soldCount = 0
+		soldCount = nil
 	}
 
 	productName := ""
@@ -498,16 +499,30 @@ func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
 			CurrencyCode: curCode,
 		},
 		// to be filled in later
-		Url:                url,
-		ReviewCount:        convertStrUint32(ratingCount),
-		Rating:             convertStrToFloat32(ratingScore),
-		ImageUrls:          images,
-		SoldMoreThan:       &soldCount,
+		Url:         url,
+		ReviewCount: convertStrUint32(ratingCount),
+		Rating:      convertStrToFloat32(ratingScore),
+		ImageUrls:   images,
+		// SoldMoreThan is only an estimate and can be inaccurate
+		SoldMoreThan:       soldCount,
+		EstimatedSoldCount: estimateSoldCount(convertStrUint32(ratingCount)),
 		StoreInfo:          storeInfo,
 		DescriptionContent: "",
 	}
 
 	return &product
+}
+
+func estimateSoldCount(reviewCount *uint32) *uint32 {
+	// percentage of average buyers that review across all product categories
+	// some product have higher review percents like electronics or books
+	reviewAverage := 0.04
+	if reviewCount == nil {
+		return nil
+	}
+	est := float64(*reviewCount) / reviewAverage
+	result := uint32(est)
+	return &result
 }
 
 func ScrapeProductImages(page playwright.Page, url string) []string {
@@ -555,8 +570,8 @@ func ScrapeProductImages(page playwright.Page, url string) []string {
 	return imageUrls
 }
 
-func scrapeSoldCount(page playwright.Page) uint32 {
-	texts, err := page.Locator("div.ui-pdp-header__subtitle > span.ui-pdp-subtitle").AllInnerTexts()
+func scrapeSoldCount(page playwright.Page) *uint32 {
+	texts, err := page.Locator(string(minimumSoldCountSelector)).AllInnerTexts()
 	if err != nil {
 		log.Fatalf("failed to scrape sold count")
 	}
@@ -670,19 +685,26 @@ func convertStrUint32(s string) *uint32 {
 }
 
 // Helper function to parse sold count from string like "Nuevo  |  +100 vendidos"
-func parseSoldCount(s string) uint32 {
+func parseSoldCount(s string) *uint32 {
 	parts := strings.Split(s, "|")
 	if len(parts) > 1 {
 		soldPart := strings.TrimSpace(parts[1])
 		soldFields := strings.Fields(soldPart)
+		// Check if "mil" is present in soldPart and print the result if so
+		if strings.Contains(soldPart, "mil") {
+			// the sold count is not accurate when it contains "mil"
+			fmt.Printf("soldPart contains 'mil': %s\n", soldPart)
+			return nil
+		}
 		if len(soldFields) > 0 {
 			soldNumStr := strings.TrimPrefix(soldFields[0], "+")
 			if num, err := strconv.ParseUint(soldNumStr, 10, 32); err == nil {
-				return uint32(num)
+				count := uint32(num)
+				return &count
 			}
 		}
 	}
-	return 0
+	return nil
 }
 
 // Helper function to clean review count by removing parentheses, e.g., "(5)" -> "5"
