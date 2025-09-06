@@ -1,5 +1,5 @@
 // Headless web scraper using Playwright for Go
-package gejie
+package zhipin
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/playwright-community/playwright-go"
+	"github.com/zshanhui/gejiezhipin/gejielib/uf"
 )
 
 const zhipinBaseUrl = "https://www.zhipin.com"
@@ -24,10 +25,10 @@ type JobPosting struct {
 	ScrapedAt    time.Time
 }
 
-func RunZhipin(firstUrl string, collectLinks bool) {
+func RunGejie(firstUrl string, collectLinks bool) {
 
 	// directly create url frontier for now
-	urlFrontier := NewURLFrontier()
+	urlFrontier := uf.NewURLFrontier()
 
 	// Initialize Playwright
 	pw, err := playwright.Run()
@@ -163,7 +164,7 @@ func ScrapePageUrl(page playwright.Page, url string) JobPosting {
 	return newJobPosting
 }
 
-func collectMoreLinks(page playwright.Page, urlFrontier URLFrontierInterface) {
+func collectMoreLinks(page playwright.Page, urlFrontier uf.URLFrontierInterface) {
 	moreJobsListSelector := "ul.look-job-list"
 	moreJobsListElems, err := page.Locator(moreJobsListSelector).All()
 	if err != nil {

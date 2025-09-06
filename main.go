@@ -9,6 +9,7 @@ import (
 	"github.com/playwright-community/playwright-go"
 	"github.com/zshanhui/gejiezhipin/cli"
 	gejie "github.com/zshanhui/gejiezhipin/gejielib"
+	"github.com/zshanhui/gejiezhipin/gejielib/zhipin"
 	utils "github.com/zshanhui/gejiezhipin/utils"
 )
 
@@ -27,7 +28,7 @@ func devTest() {
 	MaxItems := 10
 	// used to test during development
 	if len(os.Args) > 1 && os.Args[1] == "--zhipin" {
-		gejie.RunZhipin("https://www.zhipin.com/job_detail/b6840d4438ff55c41n1609S-FFVT.html", true)
+		zhipin.RunGejie("https://www.zhipin.com/job_detail/b6840d4438ff55c41n1609S-FFVT.html", true)
 		return
 	}
 
