@@ -341,7 +341,7 @@ func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []stri
 		// click next button
 		err = nextButton.Click()
 		if err != nil {
-			log.Printf("error clicking next page button: %w", err)
+			log.Printf("error clicking next page button: %s", err)
 			break
 		}
 

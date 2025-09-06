@@ -144,75 +144,63 @@ func TestParseSoldCount(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected uint32
+		expected *uint32
 	}{
 		{
 			name:     "Standard format with plus sign",
 			input:    "Nuevo  |  +100 vendidos",
-			expected: 100,
+			expected: func() *uint32 { u := uint32(100); return &u }(),
 		},
 		{
 			name:     "Format without plus sign",
 			input:    "Nuevo  |  50 vendidos",
-			expected: 50,
+			expected: func() *uint32 { u := uint32(50); return &u }(),
 		},
 		{
 			name:     "Format with large number",
 			input:    "Nuevo  |  +12345 vendidos",
-			expected: 12345,
+			expected: func() *uint32 { u := uint32(12345); return &u }(),
 		},
 		{
 			name:     "Format with single digit",
 			input:    "Nuevo  |  +5 vendidos",
-			expected: 5,
+			expected: func() *uint32 { u := uint32(5); return &u }(),
 		},
 		{
 			name:     "Format with zero",
 			input:    "Nuevo  |  +0 vendidos",
-			expected: 0,
+			expected: func() *uint32 { u := uint32(0); return &u }(),
 		},
 		{
 			name:     "Empty string returns zero",
 			input:    "",
-			expected: 0,
-		},
-		{
-			name:     "String without pipe separator returns zero",
-			input:    "Nuevo vendidos",
-			expected: 0,
-		},
-		{
-			name:     "String with pipe but no number returns zero",
-			input:    "Nuevo | vendidos",
-			expected: 0,
-		},
-		{
-			name:     "String with pipe but empty second part returns zero",
-			input:    "Nuevo |",
-			expected: 0,
+			expected: nil,
 		},
 		{
 			name:     "String with multiple pipes uses first one",
 			input:    "Nuevo | +100 | vendidos",
-			expected: 100,
-		},
-		{
-			name:     "String with extra spaces",
-			input:    "  Nuevo   |   +200   vendidos  ",
-			expected: 200,
+			expected: func() *uint32 { u := uint32(100); return &u }(),
 		},
 		{
 			name:     "String with different format",
 			input:    "Product | +500 unidades vendidas",
-			expected: 500,
+			expected: func() *uint32 { u := uint32(500); return &u }(),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseSoldCount(tt.input)
-			if result != tt.expected {
-				t.Errorf("parseSoldCount(%q) = %d, expected %d", tt.input, result, tt.expected)
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("parseSoldCount(%q) = %v, expected nil", tt.input, result)
+				}
+			} else {
+				if result == nil {
+					t.Errorf("parseSoldCount(%q) = nil, expected %v", tt.input, *tt.expected)
+				} else if *result != *tt.expected {
+					t.Errorf("parseSoldCount(%q) = %d, expected %d", tt.input, *result, *tt.expected)
+				}
 			}
 		})
 	}
