@@ -13,6 +13,13 @@ import (
 	"github.com/zshanhui/gejiezhipin/utils"
 )
 
+type CmdOptions struct {
+	MaxItems     int
+	OnlyImages   bool
+	CreateCsv    bool
+	HeadlessMode bool
+}
+
 type Price struct {
 	AmountCents  int
 	CurrencyCode utils.CurrencyCode
@@ -180,7 +187,7 @@ func (bm *BrowserManager) GetBrowser() playwright.Browser {
 	return bm.browser
 }
 
-func RunMeliSearch(searchUrl *string, maxItemsInput int8, createCsv bool) []MeliProduct {
+func RunMeliSearch(searchUrl *string, opts CmdOptions) []MeliProduct {
 	if searchUrl == nil {
 		defaultUrl := exampleMercadoLibreKeyboard
 		searchUrl = &defaultUrl
@@ -191,7 +198,13 @@ func RunMeliSearch(searchUrl *string, maxItemsInput int8, createCsv bool) []Meli
 	}
 	defer pw.Stop()
 
-	browser, err := createBrowser(pw, DefaultBrowserOptions())
+	browserOpts := DefaultBrowserOptions()
+	browserOpts.Headless = false
+	if opts.HeadlessMode {
+		browserOpts.Headless = true
+	}
+
+	browser, err := createBrowser(pw, browserOpts)
 	if err != nil {
 		log.Fatalf("could not launch browser: %v", err)
 	}
@@ -231,7 +244,7 @@ func RunMeliSearch(searchUrl *string, maxItemsInput int8, createCsv bool) []Meli
 
 	fmt.Print("page loaded, proceeding to scrape links")
 
-	productLinks := ScrapeProductLinksWithPagination(pageIndex, int(maxItemsInput))
+	productLinks := ScrapeProductLinksWithPagination(pageIndex, int(opts.MaxItems))
 	fmt.Printf("\ntotal product links scraped: %d\n", len(productLinks))
 
 	scrapeProducts := []MeliProduct{}
@@ -243,8 +256,8 @@ func RunMeliSearch(searchUrl *string, maxItemsInput int8, createCsv bool) []Meli
 			fmt.Print("product is nil")
 		}
 	}
-	fmt.Printf("total meli products scraped: %d\n\n", len(scrapeProducts))
-	fmt.Printf("first product scraped: \n")
+	fmt.Printf("total meli products scraped: %d\n", len(scrapeProducts))
+	fmt.Printf("first product scraped:")
 	utils.PrintProduct(scrapeProducts[0])
 
 	searchUrlParsed, _ := url.Parse(*searchUrl)
@@ -253,7 +266,7 @@ func RunMeliSearch(searchUrl *string, maxItemsInput int8, createCsv bool) []Meli
 		searchUrlParsed.Path = searchUrlParsed.Path[1:]
 	}
 
-	if createCsv {
+	if opts.CreateCsv {
 		fmt.Printf("creating csv for %s, number of products: %d\n", searchUrlParsed.Path, len(scrapeProducts))
 		CreateMeliProductCsv(scrapeProducts, searchUrlParsed.Path)
 	}
@@ -492,6 +505,9 @@ func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
 	images := ScrapeProductImages(productPage, url)
 	fmt.Printf("total product images scraped: %d - first image src: %s\n", len(images), images[0])
 
+	content := scrapeProductDescription(productPage)
+	fmt.Printf("product description content: %s\n", content)
+
 	product := MeliProduct{
 		Title: productName,
 		Price: Price{
@@ -507,7 +523,7 @@ func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
 		SoldMoreThan:       soldCount,
 		EstimatedSoldCount: estimateSoldCount(convertStrUint32(ratingCount)),
 		StoreInfo:          storeInfo,
-		DescriptionContent: "",
+		DescriptionContent: content,
 	}
 
 	return &product
@@ -568,6 +584,16 @@ func ScrapeProductImages(page playwright.Page, url string) []string {
 		imageUrls = append(imageUrls, imageSrc)
 	}
 	return imageUrls
+}
+
+func scrapeProductDescription(page playwright.Page) string {
+	class := ".ui-pdp-description__content"
+	descriptionContent, err := page.Locator(string(class)).InnerHTML()
+	if err != nil {
+		fmt.Printf("failed to scrape product description: %v", err)
+		return ""
+	}
+	return descriptionContent
 }
 
 func scrapeSoldCount(page playwright.Page) *uint32 {

@@ -25,11 +25,17 @@ func main() {
 }
 
 func devTest() {
-	MaxItems := 10
 	// used to test during development
 	if len(os.Args) > 1 && os.Args[1] == "--zhipin" {
 		zhipin.RunGejie("https://www.zhipin.com/job_detail/b6840d4438ff55c41n1609S-FFVT.html", true)
 		return
+	}
+
+	opts := gejie.CmdOptions{
+		MaxItems:     10,
+		OnlyImages:   false,
+		CreateCsv:    false,
+		HeadlessMode: false,
 	}
 
 	if len(os.Args) > 1 && os.Args[1] == "--meli-search" {
@@ -48,7 +54,7 @@ func devTest() {
 				break
 			}
 		}
-		products := gejie.RunMeliSearch(&searchUrlPe, int8(maxItems), false)
+		products := gejie.RunMeliSearch(&searchUrlPe, opts)
 		for _, product := range products {
 			utils.PrintProduct(&product)
 		}
@@ -62,7 +68,7 @@ func devTest() {
 		})
 
 		fmt.Print("test scraping product links...\n")
-		productLinks := gejie.ScrapeProductLinksWithPagination(page, MaxItems)
+		productLinks := gejie.ScrapeProductLinksWithPagination(page, opts.MaxItems)
 		for _, productLink := range productLinks {
 			fmt.Println(productLink)
 		}
