@@ -268,7 +268,7 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []MeliProduct {
 
 	if opts.CreateCsv {
 		fmt.Printf("creating csv for %s, number of products: %d\n", searchUrlParsed.Path, len(scrapeProducts))
-		CreateMeliProductCsv(scrapeProducts, searchUrlParsed.Path)
+		CreateMeliProductCsv(scrapeProducts, searchUrlParsed.Path, false)
 	}
 
 	return scrapeProducts
@@ -587,13 +587,18 @@ func ScrapeProductImages(page playwright.Page, url string) []string {
 }
 
 func scrapeProductDescription(page playwright.Page) string {
-	class := ".ui-pdp-description__content"
-	descriptionContent, err := page.Locator(string(class)).InnerHTML()
+	locator := page.Locator(string(productDescriptionSelector))
+	count, err := locator.Count()
+	if err != nil || count == 0 {
+		// If the element does not exist or error occurs, return empty string
+		return ""
+	}
+	content, err := locator.InnerHTML()
 	if err != nil {
 		fmt.Printf("failed to scrape product description: %v", err)
 		return ""
 	}
-	return descriptionContent
+	return content
 }
 
 func scrapeSoldCount(page playwright.Page) *uint32 {

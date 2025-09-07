@@ -24,6 +24,7 @@ const reviewsRatingSelector CssSelector = "span.ui-pdp-review__rating"
 const reviewsCountSelector CssSelector = "span.ui-pdp-review__amount"
 
 const storeNameSelector CssSelector = "div.ui-seller-data-header__title-container > h2"
+const productDescriptionSelector CssSelector = ".ui-pdp-description__content"
 const storeUrlSelector CssSelector = "div.ui-seller-data-footer__container > a"
 const storeLogoImageSelector CssSelector = "div.ui-seller-data__logo-image img"
 

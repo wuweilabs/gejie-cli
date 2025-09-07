@@ -40,6 +40,9 @@ func routeMeliUrl(url string, opts gejie.CmdOptions) {
 		return
 	}
 
+	topLevelTimer := utils.NewTimer("Top Level")
+	defer topLevelTimer.LogElapsed()
+
 	isProductUrl := false
 	isListUrl := false
 	for _, productUrl := range productUrlPrefixes {

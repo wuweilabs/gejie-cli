@@ -17,7 +17,7 @@ const ColombianPesoUsdRate CurrencyRate = 0.00025
 
 // createMeliProductCsv creates a CSV file from a slice of MeliProduct
 // The filename will have the current epoch time appended to it
-func CreateMeliProductCsv(products []MeliProduct, baseFilename string) error {
+func CreateMeliProductCsv(products []MeliProduct, baseFilename string, useChineseHeaders bool) error {
 	fmt.Printf("creating csv document (%s) with %d products", baseFilename, len(products))
 	// Append epoch timestamp to filename
 	epoch := time.Now().Unix()
@@ -72,7 +72,10 @@ func CreateMeliProductCsv(products []MeliProduct, baseFilename string) error {
 		"店铺名",
 		"店铺链接",
 	}
-	fmt.Print("headers in Chinese: ", headerChinese)
+
+	if useChineseHeaders {
+		header = headerChinese
+	}
 
 	if err := writer.Write(header); err != nil {
 		return fmt.Errorf("failed to write CSV header: %w", err)
