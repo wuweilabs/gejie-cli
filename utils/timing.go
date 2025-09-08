@@ -30,12 +30,12 @@ func (t *Timer) LogElapsed() time.Duration {
 	minutes := int(elapsed.Minutes())
 	seconds := int(elapsed.Seconds()) % 60
 	milliseconds := elapsed.Milliseconds() % 1000
-	fmt.Printf("[TIMING]: %s took %dm %ds %dms\n", t.name, minutes, seconds, milliseconds)
+	fmt.Printf("[TIMING]: %s took %dm %ds %dms\n\n", t.name, minutes, seconds, milliseconds)
 	return elapsed
 }
 
 func (t *Timer) LogElapsedWithMessage(message string) time.Duration {
 	elapsed := t.Elapsed()
-	fmt.Printf("[TIMING] %s: %s took %dms\n", t.name, message, elapsed.Milliseconds())
+	fmt.Printf("[TIMING] %s: %s took %dms\n\n", t.name, message, elapsed.Milliseconds())
 	return elapsed
 }

@@ -247,6 +247,7 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []MeliProduct {
 	productLinks := ScrapeProductLinksWithPagination(pageIndex, int(opts.MaxItems))
 	fmt.Printf("\ntotal product links scraped: %d\n", len(productLinks))
 
+	// TODO: add parallel scraping and
 	scrapeProducts := []MeliProduct{}
 	for _, url := range productLinks {
 		product := scrapeProductPage(browser, url)
@@ -275,6 +276,9 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []MeliProduct {
 }
 
 func ScrapeSinglePageProductLinks(page playwright.Page) ([]string, error) {
+	productLinksTimer := utils.NewTimer("Scrape Per Page Product Links")
+	defer productLinksTimer.LogElapsed()
+
 	productLinks, err := page.Locator(productLinksSelector).All()
 	if err != nil {
 		return []string{}, fmt.Errorf("could not extract product links: %w", err)
@@ -390,6 +394,9 @@ func ScrapeProductPageDirect(url string) *MeliProduct {
 }
 
 func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
+	productTimer := utils.NewTimer("Individual Product Page")
+	defer productTimer.LogElapsed()
+
 	var productPage playwright.Page
 	defaultTimeout := float64(gejieConfig.BrowserTimeout)
 
