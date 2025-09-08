@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/playwright-community/playwright-go"
+	"github.com/zshanhui/gejiezhipin/gejielib/uf"
 	"github.com/zshanhui/gejiezhipin/utils"
 )
 
@@ -244,17 +245,24 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []MeliProduct {
 
 	fmt.Print("page loaded, proceeding to scrape links")
 
-	productLinks := ScrapeProductLinksWithPagination(pageIndex, int(opts.MaxItems))
-	fmt.Printf("\ntotal product links scraped: %d\n", len(productLinks))
+	urlFrontier := ScrapeProductLinksWithPagination(pageIndex, int(opts.MaxItems))
+	fmt.Printf("\ntotal product links scraped: %d\n", urlFrontier.Count())
 
 	// TODO: add parallel scraping and
 	scrapeProducts := []MeliProduct{}
-	for _, url := range productLinks {
+	for {
+		url, hasNext := urlFrontier.GetNext()
+		if !hasNext {
+			break
+		}
+		
 		product := scrapeProductPage(browser, url)
 		if product != nil {
 			scrapeProducts = append(scrapeProducts, *product)
+			urlFrontier.MarkVisited(url)
 		} else {
 			fmt.Print("product is nil")
+			urlFrontier.MarkFailed(url)
 		}
 	}
 	fmt.Printf("total meli products scraped: %d\n", len(scrapeProducts))
@@ -317,28 +325,28 @@ func ScrapeSinglePageProductLinks(page playwright.Page) ([]string, error) {
 	return productLinkUrls, nil
 }
 
-func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []string {
-	allProductLinks := []string{}
+func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) uf.URLFrontierInterface {
+	urlFrontier := uf.NewURLFrontier()
 	currentPage := 1
 
-	for len(allProductLinks) < maxItems {
+	for urlFrontier.Count() < maxItems {
 		fmt.Printf("scraping page %d...\n", currentPage)
 
 		curPageProductLinks, err := ScrapeSinglePageProductLinks(page)
 		if err != nil {
 			fmt.Printf("error scraping product links: %v", err)
-			return []string{}
+			return urlFrontier
 		}
 		fmt.Printf("found %d product links on page %d\n", len(curPageProductLinks), currentPage)
 
-		remainingItems := maxItems - len(allProductLinks)
+		remainingItems := maxItems - urlFrontier.Count()
 		if len(curPageProductLinks) <= remainingItems {
-			allProductLinks = append(allProductLinks, curPageProductLinks...)
+			urlFrontier.BulkAdd(curPageProductLinks)
 		} else {
-			allProductLinks = append(allProductLinks, curPageProductLinks[:remainingItems]...)
+			urlFrontier.BulkAdd(curPageProductLinks[:remainingItems])
 		}
 
-		if len(allProductLinks) >= maxItems {
+		if urlFrontier.Count() >= maxItems {
 			fmt.Printf("reached max items (%d), stopping pagination\n", maxItems)
 			break
 		}
@@ -376,8 +384,8 @@ func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []stri
 		currentPage++
 	}
 
-	fmt.Printf("total products links scraped across %d pages: %d\n", currentPage, len(allProductLinks))
-	return allProductLinks
+	fmt.Printf("total products links scraped across %d pages: %d\n", currentPage, urlFrontier.Count())
+	return urlFrontier
 }
 
 func ScrapeProductPageDirect(url string) *MeliProduct {

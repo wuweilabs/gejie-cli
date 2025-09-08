@@ -68,8 +68,14 @@ func devTest() {
 		})
 
 		fmt.Print("test scraping product links...\n")
-		productLinks := gejie.ScrapeProductLinksWithPagination(page, opts.MaxItems)
-		for _, productLink := range productLinks {
+		urlFrontier := gejie.ScrapeProductLinksWithPagination(page, opts.MaxItems)
+		fmt.Printf("Total links scraped: %d\n", urlFrontier.Count())
+		
+		for {
+			productLink, hasNext := urlFrontier.GetNext()
+			if !hasNext {
+				break
+			}
 			fmt.Println(productLink)
 		}
 
