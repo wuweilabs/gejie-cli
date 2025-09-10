@@ -2,8 +2,8 @@ package utils
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
+	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
@@ -11,24 +11,24 @@ import (
 
 func PrintProduct(productStruct interface{}) {
 	if productStruct == nil {
-		fmt.Println("product is nil")
+		slog.Info("product is nil")
 		return
 	}
 	productJson, err := json.Marshal(productStruct)
 	if err != nil {
-		fmt.Printf("failed to marshal product: %v\n", err)
+		slog.Error("failed to marshal product", "error", err)
 		return
 	}
 	var productMap map[string]interface{}
 	if err := json.Unmarshal(productJson, &productMap); err != nil {
-		fmt.Printf("failed to unmarshal product: %v\n", err)
+		slog.Error("failed to unmarshal product", "error", err)
 		return
 	}
-	fmt.Print("\n\n")
+	slog.Info("\n\n")
 	for k, v := range productMap {
-		fmt.Printf("%s: %v\n", k, v)
+		slog.Info("product field", "key", k, "value", v)
 	}
-	fmt.Print("\n\n")
+	slog.Info("\n\n")
 }
 
 func GetCountryRegionFromUrl(meliUrl string) Country {

@@ -2,7 +2,7 @@
 package main
 
 import (
-	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 
@@ -17,7 +17,7 @@ const devMode int8 = 0
 
 func main() {
 	if devMode == 1 {
-		fmt.Print("dev mode enabled\n")
+		slog.Info("dev mode enabled")
 		devTest()
 	} else {
 		cli.Execute()
@@ -47,9 +47,9 @@ func devTest() {
 			if arg == "--max-items" && i+1 < len(os.Args) {
 				if parsed, err := strconv.Atoi(os.Args[i+1]); err == nil {
 					maxItems = parsed
-					fmt.Printf("retrieved maxItems: %d\n", maxItems)
+					slog.Info("retrieved maxItems", "value", maxItems)
 				} else {
-					fmt.Printf("invalid maxItems value: %s - using default value 2.\n", os.Args[i+1])
+					slog.Error("invalid maxItems value - using default value 2", "value", os.Args[i+1])
 				}
 				break
 			}
@@ -67,10 +67,10 @@ func devTest() {
 			Timeout: playwright.Float(8000),
 		})
 
-		fmt.Print("test scraping product links...\n")
+		slog.Info("test scraping product links...")
 		productLinks := gejie.ScrapeProductLinksWithPagination(page, opts.MaxItems)
 		for _, productLink := range productLinks {
-			fmt.Println(productLink)
+			slog.Info("product link", "url", productLink)
 		}
 
 	} else if len(os.Args) > 1 && os.Args[1] == "--meli-product" {
@@ -79,13 +79,13 @@ func devTest() {
 
 	} else if len(os.Args) > 1 && os.Args[1] == "--meli-product-images" {
 		images := gejie.ScrapeProductImages(nil, gejie.ProductUrlExample)
-		fmt.Print("extracted images: ", images)
+		slog.Info("extracted images", "images", images)
 
 	} else if len(os.Args) > 1 && os.Args[1] == "--meli-store" {
 		panic("not implemented")
 
 	} else {
-		fmt.Printf("command not recognized: %s", os.Args[1])
+		slog.Error("command not recognized", "arg", os.Args[1])
 		os.Exit(1)
 	}
 }

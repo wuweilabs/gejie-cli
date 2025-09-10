@@ -1,7 +1,7 @@
 package meli
 
-import "fmt"
+import "log/slog"
 
 func FromHome() {
-	fmt.Printf("start scrape from homepage")
+	slog.Info("start scrape from homepage")
 }

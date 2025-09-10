@@ -3,10 +3,13 @@ package gejie
 import (
 	"encoding/csv"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zshanhui/gejiezhipin/gejielib/meli"
 )
 
 type CurrencyRate float32
@@ -17,8 +20,8 @@ const ColombianPesoUsdRate CurrencyRate = 0.00025
 
 // createMeliProductCsv creates a CSV file from a slice of MeliProduct
 // The filename will have the current epoch time appended to it
-func CreateMeliProductCsv(products []MeliProduct, baseFilename string, useChineseHeaders bool) error {
-	fmt.Printf("creating csv document (%s) with %d products", baseFilename, len(products))
+func CreateMeliProductCsv(products []meli.MeliProduct, baseFilename string, useChineseHeaders bool) error {
+	slog.Info("creating csv document", "baseFilename", baseFilename, "count", len(products))
 	// Append epoch timestamp to filename
 	epoch := time.Now().Unix()
 	filename := fmt.Sprintf("csv_files/%s-%d.csv", baseFilename, epoch)
@@ -135,7 +138,7 @@ func CreateMeliProductCsv(products []MeliProduct, baseFilename string, useChines
 
 // PrintCsv prints CSV contents in nicely formatted columns
 func PrintCsv(filename string) error {
-	fmt.Printf("printing csv file: %s", filename)
+	slog.Info("printing csv file", "filename", filename)
 	// Open the CSV file
 	file, err := os.Open(filename)
 	if err != nil {
@@ -153,7 +156,7 @@ func PrintCsv(filename string) error {
 	}
 
 	if len(records) == 0 {
-		fmt.Println("CSV file is empty")
+		slog.Info("csv file is empty")
 		return nil
 	}
 
@@ -201,11 +204,7 @@ func printRow(row []string, columnWidths []int, isHeader bool) {
 		if i < len(columnWidths) {
 			// Pad the field to match column width
 			paddedField := fmt.Sprintf("%-*s", columnWidths[i], field)
-			if isHeader {
-				fmt.Printf("| %s ", paddedField)
-			} else {
-				fmt.Printf("| %s ", paddedField)
-			}
+			fmt.Printf("| %s ", paddedField)
 		}
 	}
 	fmt.Println("|")

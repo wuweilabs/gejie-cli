@@ -3,13 +3,16 @@ package gejie
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"math/rand"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/playwright-community/playwright-go"
+	"github.com/zshanhui/gejiezhipin/gejielib/meli"
 	"github.com/zshanhui/gejiezhipin/utils"
 )
 
@@ -18,31 +21,7 @@ type CmdOptions struct {
 	OnlyImages   bool
 	CreateCsv    bool
 	HeadlessMode bool
-}
-
-type Price struct {
-	AmountCents  int
-	CurrencyCode utils.CurrencyCode
-}
-
-type MeliProduct struct {
-	Title              string
-	Price              Price
-	Url                string
-	ReviewCount        *uint32
-	Rating             *float32
-	ImageUrls          []string
-	SoldMoreThan       *uint32
-	EstimatedSoldCount *uint32
-	DescriptionContent string
-	StoreInfo          MeliStoreInfo
-}
-
-type MeliStoreInfo struct {
-	Name                 string
-	Url                  string
-	LogoImageSrc         string
-	LogoImageSrcOriginal string
+	Workers      int
 }
 
 type BrowserManager struct {
@@ -85,17 +64,19 @@ func createBrowser(pw *playwright.Playwright, opts *BrowserOptions) (playwright.
 			string(noSandbox),
 		},
 	}
-	if gejieConfig.BrowserType == BrowserTypeFirefox {
+
+	switch gejieConfig.BrowserType {
+	case BrowserTypeFirefox:
 		browser, err = pw.Firefox.Launch(launchOpts)
 		if err != nil {
 			return nil, err
 		}
-	} else if gejieConfig.BrowserType == BrowserTypeChromium {
+	case BrowserTypeChromium:
 		browser, err = pw.Chromium.Launch(launchOpts)
 		if err != nil {
 			return nil, err
 		}
-	} else {
+	default:
 		return nil, fmt.Errorf("browser type not supported: %s", gejieConfig.BrowserType)
 	}
 	return browser, nil
@@ -187,7 +168,7 @@ func (bm *BrowserManager) GetBrowser() playwright.Browser {
 	return bm.browser
 }
 
-func RunMeliSearch(searchUrl *string, opts CmdOptions) []MeliProduct {
+func RunMeliSearch(searchUrl *string, opts CmdOptions) []meli.MeliProduct {
 	if searchUrl == nil {
 		defaultUrl := exampleMercadoLibreKeyboard
 		searchUrl = &defaultUrl
@@ -242,23 +223,61 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []MeliProduct {
 		log.Fatalf("failed to navigate: %v", err)
 	}
 
-	fmt.Print("page loaded, proceeding to scrape links")
+	slog.Info("page loaded, proceeding to scrape links")
 
 	productLinks := ScrapeProductLinksWithPagination(pageIndex, int(opts.MaxItems))
-	fmt.Printf("\ntotal product links scraped: %d\n", len(productLinks))
+	slog.Info("total product links scraped", "count", len(productLinks))
+
+	numWorkers := opts.Workers
+	if numWorkers <= 0 {
+		numWorkers = 1
+	}
+	jobs := make(chan string)
+	results := make(chan meli.MeliProduct, len(productLinks))
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for u := range jobs {
+				prd := scrapeProductPage(browser, u)
+				// prd := meli.ScrapeProductPageDummy(browser, u)
+				if prd != nil {
+					results <- *prd
+				}
+			}
+		}()
+	}
+
+	go func() {
+		for _, ur := range productLinks {
+			jobs <- ur
+		}
+		close(jobs)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
 
 	// TODO: add parallel scraping and
-	scrapeProducts := []MeliProduct{}
-	for _, url := range productLinks {
-		product := scrapeProductPage(browser, url)
-		if product != nil {
-			scrapeProducts = append(scrapeProducts, *product)
-		} else {
-			fmt.Print("product is nil")
-		}
+	scrapeProducts := []meli.MeliProduct{}
+	for prd := range results {
+		scrapeProducts = append(scrapeProducts, prd)
 	}
-	fmt.Printf("total meli products scraped: %d\n", len(scrapeProducts))
-	fmt.Printf("first product scraped:")
+	// for _, url := range productLinks {
+	// 	product := scrapeProductPage(browser, url)
+	// 	if product != nil {
+	// 		scrapeProducts = append(scrapeProducts, *product)
+	// 	} else {
+	// 		fmt.Print("product is nil")
+	// 	}
+	// }
+	slog.Info("total meli products scraped", "count", len(scrapeProducts))
+	slog.Info("first product scraped")
 	utils.PrintProduct(scrapeProducts[0])
 
 	searchUrlParsed, _ := url.Parse(*searchUrl)
@@ -268,7 +287,7 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []MeliProduct {
 	}
 
 	if opts.CreateCsv {
-		fmt.Printf("creating csv for %s, number of products: %d\n", searchUrlParsed.Path, len(scrapeProducts))
+		slog.Info("creating csv", "path", searchUrlParsed.Path, "count", len(scrapeProducts))
 		CreateMeliProductCsv(scrapeProducts, searchUrlParsed.Path, false)
 	}
 
@@ -322,14 +341,14 @@ func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []stri
 	currentPage := 1
 
 	for len(allProductLinks) < maxItems {
-		fmt.Printf("scraping page %d...\n", currentPage)
+		slog.Info("scraping page", "page", currentPage)
 
 		curPageProductLinks, err := ScrapeSinglePageProductLinks(page)
 		if err != nil {
-			fmt.Printf("error scraping product links: %v", err)
+			slog.Error("error scraping product links", "error", err)
 			return []string{}
 		}
-		fmt.Printf("found %d product links on page %d\n", len(curPageProductLinks), currentPage)
+		slog.Info("found product links on page", "count", len(curPageProductLinks), "page", currentPage)
 
 		remainingItems := maxItems - len(allProductLinks)
 		if len(curPageProductLinks) <= remainingItems {
@@ -339,7 +358,7 @@ func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []stri
 		}
 
 		if len(allProductLinks) >= maxItems {
-			fmt.Printf("reached max items (%d), stopping pagination\n", maxItems)
+			slog.Info("reached max items, stopping pagination", "maxItems", maxItems)
 			break
 		}
 
@@ -351,7 +370,7 @@ func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []stri
 			break
 		}
 		if nextExists == 0 {
-			fmt.Printf("no more pages available, stopping pagination")
+			slog.Info("no more pages available, stopping pagination")
 			break
 		}
 
@@ -371,16 +390,18 @@ func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []stri
 			break
 		}
 
-		// Sleep for 1 second between pages
-		time.Sleep(time.Duration(1+rand.Intn(3)) * time.Second)
+		// Sleep for 1-3 seconds between pages
+		coupleSecs := 1 + rand.Intn(3)
+		slog.Info("sleeping between pages", "seconds", coupleSecs)
+		time.Sleep(time.Duration(coupleSecs) * time.Second)
 		currentPage++
 	}
 
-	fmt.Printf("total products links scraped across %d pages: %d\n", currentPage, len(allProductLinks))
+	slog.Info("total products links scraped", "pages", currentPage, "count", len(allProductLinks))
 	return allProductLinks
 }
 
-func ScrapeProductPageDirect(url string) *MeliProduct {
+func ScrapeProductPageDirect(url string) *meli.MeliProduct {
 	bm, err := NewBrowserManager(&BrowserOptions{
 		Headless:    gejieConfig.BrowserHeadlessMode,
 		BlockImages: false,
@@ -388,12 +409,12 @@ func ScrapeProductPageDirect(url string) *MeliProduct {
 		BlockFonts:  false,
 	})
 	if err != nil {
-		fmt.Printf("could not create browser manager: %v", err)
+		slog.Error("could not create browser manager", "error", err)
 	}
 	return scrapeProductPage(bm.browser, url)
 }
 
-func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
+func scrapeProductPage(browser playwright.Browser, url string) *meli.MeliProduct {
 	productTimer := utils.NewTimer("Individual Product Page")
 	defer productTimer.LogElapsed()
 
@@ -467,12 +488,12 @@ func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
 	productName := ""
 	nameCount, err := productPage.Locator(string(nameSelector)).Count()
 	if nameCount == 0 || err != nil {
-		log.Print("product name not found, product page not found")
+		slog.Error("product name not found, product page not found")
 		return nil
 	} else {
 		productName, err = productPage.Locator(string(nameSelector)).First().TextContent()
 		if err != nil {
-			log.Print("productName text not founded")
+			slog.Error("productName text not founded")
 			return nil
 		}
 	}
@@ -496,7 +517,7 @@ func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
 	if centCount > 0 {
 		amountCentsElem = productPage.Locator(string(priceAmountCentSelector)).First()
 	} else {
-		fmt.Printf("amount cent not found, continuing with 0\n")
+		slog.Info("amount cent not found, continuing with 0")
 	}
 
 	var amountCentsInt = 0
@@ -505,19 +526,18 @@ func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
 	}
 
 	amountInt := utils.StandardizeAmountCents(amount, "")
-	fmt.Printf("amount cents parsed: %d, amount whole parsed: %d\n", amountCentsInt, amountInt)
+	slog.Info("parsed amounts", "amountCents", amountCentsInt, "amountWhole", amountInt)
 
 	storeInfo := scrapeStoreInfo(productPage)
 
 	images := ScrapeProductImages(productPage, url)
-	fmt.Printf("total product images scraped: %d - first image src: %s\n", len(images), images[0])
+	slog.Info("total product images scraped", "count", len(images), "firstImage", images[0])
 
 	content := scrapeProductDescription(productPage)
-	fmt.Printf("product description content: %s\n", content)
 
-	product := MeliProduct{
+	product := meli.MeliProduct{
 		Title: productName,
-		Price: Price{
+		Price: meli.Price{
 			AmountCents:  amountInt + amountCentsInt,
 			CurrencyCode: curCode,
 		},
@@ -532,6 +552,11 @@ func scrapeProductPage(browser playwright.Browser, url string) *MeliProduct {
 		StoreInfo:          storeInfo,
 		DescriptionContent: content,
 	}
+
+	// to add some randomness so it seems more like natural browsing
+	randMs := 1000 + rand.Intn(2200) // random ms between 1000 and 3199
+	slog.Info("delaying for milliseconds", "ms", randMs)
+	time.Sleep(time.Duration(randMs) * time.Millisecond)
 
 	return &product
 }
@@ -602,7 +627,7 @@ func scrapeProductDescription(page playwright.Page) string {
 	}
 	content, err := locator.InnerHTML()
 	if err != nil {
-		fmt.Printf("failed to scrape product description: %v", err)
+		slog.Error("failed to scrape product description", "error", err)
 		return ""
 	}
 	return content
@@ -619,33 +644,33 @@ func scrapeSoldCount(page playwright.Page) *uint32 {
 	return soldCount
 }
 
-func scrapeStoreInfo(page playwright.Page) MeliStoreInfo {
+func scrapeStoreInfo(page playwright.Page) meli.MeliStoreInfo {
 	storeNameElem := page.Locator(string(storeNameSelector)).First()
 	storeName, err := storeNameElem.TextContent()
 	if err != nil {
-		fmt.Printf("failed to scrape store name: %v", err)
+		slog.Error("failed to scrape store name", "error", err)
 	}
 	storeUrlElem := page.Locator(string(storeUrlSelector)).First()
 	storeUrl, err := storeUrlElem.GetAttribute("href")
 	if err != nil {
-		fmt.Printf("failed to scrape store url: %v", err)
+		slog.Error("failed to scrape store url", "error", err)
 		storeUrl = ""
 	}
 	storeUrl = parseUrlBase(storeUrl)
 	storeLogoImageCount, err := page.Locator(string(storeLogoImageSelector)).Count()
 	if err != nil {
-		fmt.Printf("failed to scrape store logo image does not exist: %v", err)
+		slog.Error("failed to scrape store logo image does not exist", "error", err)
 		storeLogoImageCount = 0
 	}
 	imageSrc := ""
 	if storeLogoImageCount > 0 {
 		imageSrc, err = page.Locator(string(storeLogoImageSelector)).First().GetAttribute("data-src")
 		if err != nil {
-			fmt.Printf("failed to scrape store logo image src: %v", err)
+			slog.Error("failed to scrape store logo image src", "error", err)
 			imageSrc = ""
 		}
 	}
-	return MeliStoreInfo{
+	return meli.MeliStoreInfo{
 		Name:                 storeName,
 		Url:                  storeUrl,
 		LogoImageSrcOriginal: imageSrc,
@@ -671,7 +696,7 @@ func parseUrlBase(s string) string {
 func parseCents(amountCentsElem playwright.Locator) int {
 	amountCentsInt := 0
 	if amountCentsElem == nil {
-		fmt.Println("amount cents element not found")
+		slog.Error("amount cents element not found")
 		log.Fatalf("amount cents not founded")
 		amountCentsInt = 0
 	} else {
@@ -731,7 +756,7 @@ func parseSoldCount(s string) *uint32 {
 		// Check if "mil" is present in soldPart and print the result if so
 		if strings.Contains(soldPart, "mil") {
 			// the sold count is not accurate when it contains "mil"
-			fmt.Printf("soldPart contains 'mil': %s\n", soldPart)
+			slog.Info("soldPart contains 'mil'", "soldPart", soldPart)
 			return nil
 		}
 		if len(soldFields) > 0 {

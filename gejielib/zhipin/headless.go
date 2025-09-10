@@ -4,6 +4,7 @@ package zhipin
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"math/rand"
 	"time"
 
@@ -92,7 +93,7 @@ func RunGejie(firstUrl string, collectLinks bool) {
 		}
 	}
 
-	fmt.Print(scrapedJobPostings)
+	slog.Info("scraped job postings", "count", len(scrapedJobPostings))
 	// Add small delay to observe results
 	time.Sleep(2 * time.Second)
 }
