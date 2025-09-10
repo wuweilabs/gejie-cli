@@ -74,7 +74,7 @@ func devTest() {
 		}
 
 	} else if len(os.Args) > 1 && os.Args[1] == "--meli-product" {
-		product := gejie.ScrapeProductPageDirect(gejie.ProductUrlExample)
+		product := gejie.ScrapeProductPageDirect(gejie.ProductUrlExample, opts)
 		utils.PrintProduct(product)
 
 	} else if len(os.Args) > 1 && os.Args[1] == "--meli-product-images" {

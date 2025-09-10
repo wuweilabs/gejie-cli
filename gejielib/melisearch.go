@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +16,8 @@ import (
 	"github.com/zshanhui/gejiezhipin/gejielib/meli"
 	"github.com/zshanhui/gejiezhipin/utils"
 )
+
+var jlog = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 type CmdOptions struct {
 	MaxItems     int
@@ -106,6 +109,14 @@ func NewBrowserManager(opts *BrowserOptions) (*BrowserManager, error) {
 		pw.Stop()
 		return nil, err
 	}
+
+	context.On("request", func(req playwright.Request) {
+		jlog.Info("on request information", "method", req.Method(), "url", req.URL(), "headers", req.Headers())
+	})
+	context.On("response", func(res playwright.Response) {
+		jlog.Info("on response information", "response.status",
+			res.Status(), "response.url", res.URL(), "resp.headers", res.Headers())
+	})
 
 	if opts.BlockImages || opts.BlockMedia || opts.BlockFonts {
 		context.Route("**/*", func(route playwright.Route) {
@@ -409,9 +420,9 @@ func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []stri
 	return allProductLinks
 }
 
-func ScrapeProductPageDirect(url string) *meli.MeliProduct {
+func ScrapeProductPageDirect(url string, opts CmdOptions) *meli.MeliProduct {
 	bm, err := NewBrowserManager(&BrowserOptions{
-		Headless:    gejieConfig.BrowserHeadlessMode,
+		Headless:    opts.HeadlessMode,
 		BlockImages: false,
 		BlockMedia:  false,
 		BlockFonts:  false,
@@ -419,6 +430,7 @@ func ScrapeProductPageDirect(url string) *meli.MeliProduct {
 	if err != nil {
 		slog.Error("could not create browser manager", "error", err)
 	}
+
 	return scrapeProductPage(bm.browser, url)
 }
 

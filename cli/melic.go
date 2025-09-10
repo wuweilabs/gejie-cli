@@ -77,7 +77,7 @@ func routeMeliUrl(url string, opts gejie.CmdOptions) {
 		}
 
 		slog.Info("scraping product url", "url", url)
-		product := gejie.ScrapeProductPageDirect(url)
+		product := gejie.ScrapeProductPageDirect(url, opts)
 		utils.PrintProduct(product)
 
 		// ./gejiec meli --url https://listado.mercadolibre.com.mx/carburador-stihl --max-items 5 --create-csv
