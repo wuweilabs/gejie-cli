@@ -226,6 +226,10 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []meli.MeliProduct {
 	slog.Info("page loaded, proceeding to scrape links")
 
 	productLinks := ScrapeProductLinksWithPagination(pageIndex, int(opts.MaxItems))
+	if len(productLinks) == 0 {
+		slog.Error("no product links found, potential blocked by mercadolibre due to local vpn use, stopping")
+		return nil
+	}
 	slog.Info("total product links scraped", "count", len(productLinks))
 
 	numWorkers := opts.Workers
@@ -349,6 +353,10 @@ func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []stri
 			return []string{}
 		}
 		slog.Info("found product links on page", "count", len(curPageProductLinks), "page", currentPage)
+		if len(curPageProductLinks) == 0 {
+			slog.Error("no product links found on page, stopping pagination")
+			return []string{}
+		}
 
 		remainingItems := maxItems - len(allProductLinks)
 		if len(curPageProductLinks) <= remainingItems {

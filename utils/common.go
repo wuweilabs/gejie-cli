@@ -24,11 +24,12 @@ func PrintProduct(productStruct interface{}) {
 		slog.Error("failed to unmarshal product", "error", err)
 		return
 	}
-	slog.Info("\n\n")
-	for k, v := range productMap {
-		slog.Info("product field", "key", k, "value", v)
+	productJsonPretty, err := json.MarshalIndent(productMap, "", "  ")
+	if err != nil {
+		slog.Error("failed to marshal product for pretty print", "error", err)
+		return
 	}
-	slog.Info("\n\n")
+	slog.Info("\n" + string(productJsonPretty) + "\n")
 }
 
 func GetCountryRegionFromUrl(meliUrl string) Country {
