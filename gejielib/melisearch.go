@@ -14,6 +14,7 @@ import (
 
 	"github.com/playwright-community/playwright-go"
 	"github.com/zshanhui/gejiezhipin/gejielib/meli"
+	"github.com/zshanhui/gejiezhipin/gejielib/uf"
 	"github.com/zshanhui/gejiezhipin/utils"
 )
 
@@ -25,6 +26,7 @@ type CmdOptions struct {
 	CreateCsv    bool
 	HeadlessMode bool
 	Workers      int
+	Browser      BrowserType
 }
 
 type BrowserManager struct {
@@ -56,7 +58,7 @@ func DefaultBrowserOptions() *BrowserOptions {
 	}
 }
 
-func createBrowser(pw *playwright.Playwright, opts *BrowserOptions) (playwright.Browser, error) {
+func createBrowser(pw *playwright.Playwright, opts *BrowserOptions, cmdOpts CmdOptions) (playwright.Browser, error) {
 	var browser playwright.Browser
 	var err error
 	launchOpts := playwright.BrowserTypeLaunchOptions{
@@ -68,24 +70,35 @@ func createBrowser(pw *playwright.Playwright, opts *BrowserOptions) (playwright.
 		},
 	}
 
-	switch gejieConfig.BrowserType {
+	switch cmdOpts.Browser {
 	case BrowserTypeFirefox:
 		browser, err = pw.Firefox.Launch(launchOpts)
 		if err != nil {
 			return nil, err
 		}
 	case BrowserTypeChromium:
-		browser, err = pw.Chromium.Launch(launchOpts)
-		if err != nil {
-			return nil, err
+		if opts.Headless {
+			// always use Firefox if headless mode since Chrome does not work headless
+			slog.Info("running browser in Firefox headless mode")
+			browser, err = pw.Firefox.Launch(launchOpts)
+			if err != nil {
+				return nil, err
+			}
+			// launchOpts.Args = append(launchOpts.Args, string("--headless=new"))
+			// launchOpts.Args = append(launchOpts.Args, string("--disable-dev-shm-usage"))
+		} else {
+			browser, err = pw.Chromium.Launch(launchOpts)
+			if err != nil {
+				return nil, err
+			}
 		}
 	default:
-		return nil, fmt.Errorf("browser type not supported: %s", gejieConfig.BrowserType)
+		return nil, fmt.Errorf("browser type not supported: %s", cmdOpts.Browser)
 	}
 	return browser, nil
 }
 
-func NewBrowserManager(opts *BrowserOptions) (*BrowserManager, error) {
+func NewBrowserManager(opts *BrowserOptions, cmdOpts CmdOptions) (*BrowserManager, error) {
 	if opts == nil {
 		opts = DefaultBrowserOptions()
 	}
@@ -95,7 +108,7 @@ func NewBrowserManager(opts *BrowserOptions) (*BrowserManager, error) {
 		return nil, err
 	}
 
-	newBrowser, err := createBrowser(pw, opts)
+	newBrowser, err := createBrowser(pw, opts, cmdOpts)
 	if err != nil {
 		pw.Stop()
 		return nil, err
@@ -196,7 +209,7 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []meli.MeliProduct {
 		browserOpts.Headless = true
 	}
 
-	browser, err := createBrowser(pw, browserOpts)
+	browser, err := createBrowser(pw, browserOpts, opts)
 	if err != nil {
 		log.Fatalf("could not launch browser: %v", err)
 	}
@@ -247,50 +260,43 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []meli.MeliProduct {
 	if numWorkers <= 0 {
 		numWorkers = 1
 	}
-	jobs := make(chan string)
+	// jobs := make(chan string)
 	results := make(chan meli.MeliProduct, len(productLinks))
 
+	urlFrontier := uf.NewURLFrontier()
+	urlFrontier.BulkAdd(productLinks)
+
 	var wg sync.WaitGroup
+	workerUrlFrontier := func() {
+		defer wg.Done()
+		for {
+			ur, ok := urlFrontier.GetNext()
+			if !ok {
+				// no more pending urls to scrape
+				return
+			}
+			urlFrontier.MarkVisited(ur)
+			// prd := meli.ScrapeProductPageDummy(browser, ur)
+			prd := scrapeProductPage(browser, ur)
+			if prd != nil {
+				results <- *prd
+			} else {
+				urlFrontier.MarkFailed(ur)
+			}
+		}
+	}
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for u := range jobs {
-				prd := scrapeProductPage(browser, u)
-				// prd := meli.ScrapeProductPageDummy(browser, u)
-				if prd != nil {
-					results <- *prd
-				}
-			}
-		}()
+		go workerUrlFrontier()
 	}
 
-	go func() {
-		for _, ur := range productLinks {
-			jobs <- ur
-		}
-		close(jobs)
-	}()
+	go func() { wg.Wait(); close(results) }()
 
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// TODO: add parallel scraping and
 	scrapeProducts := []meli.MeliProduct{}
 	for prd := range results {
 		scrapeProducts = append(scrapeProducts, prd)
 	}
-	// for _, url := range productLinks {
-	// 	product := scrapeProductPage(browser, url)
-	// 	if product != nil {
-	// 		scrapeProducts = append(scrapeProducts, *product)
-	// 	} else {
-	// 		fmt.Print("product is nil")
-	// 	}
-	// }
 	slog.Info("total meli products scraped", "count", len(scrapeProducts))
 	slog.Info("first product scraped")
 	utils.PrintProduct(scrapeProducts[0])
@@ -426,7 +432,7 @@ func ScrapeProductPageDirect(url string, opts CmdOptions) *meli.MeliProduct {
 		BlockImages: false,
 		BlockMedia:  false,
 		BlockFonts:  false,
-	})
+	}, opts)
 	if err != nil {
 		slog.Error("could not create browser manager", "error", err)
 	}
@@ -601,7 +607,9 @@ func ScrapeProductImages(page playwright.Page, url string) []string {
 		opts.BlockImages = false
 		opts.BlockMedia = false
 		opts.BlockFonts = false
-		bm, err := NewBrowserManager(opts)
+		bm, err := NewBrowserManager(opts, CmdOptions{
+			Browser: BrowserTypeFirefox,
+		})
 		if err != nil {
 			log.Fatalf("could not create browser manager: %v", err)
 		}

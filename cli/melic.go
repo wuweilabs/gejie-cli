@@ -20,6 +20,9 @@ var meliCmd = &cobra.Command{
 		createCsv, _ := cmd.Flags().GetBool("create-csv")
 		headlessMode, _ := cmd.Flags().GetBool("headless")
 		workers, _ := cmd.Flags().GetInt("workers")
+		browserStr, _ := cmd.Flags().GetString("browser")
+
+		browserType := gejie.GetBrowserType(browserStr)
 
 		slog.Info("meli command options",
 			"maxItems", maxItems,
@@ -35,6 +38,7 @@ var meliCmd = &cobra.Command{
 			CreateCsv:    createCsv,
 			HeadlessMode: headlessMode,
 			Workers:      workers,
+			Browser:      browserType,
 		})
 	},
 }
@@ -97,5 +101,6 @@ func init() {
 	meliCmd.Flags().Bool("create-csv", false, "create a csv file of the scraped products")
 	meliCmd.Flags().Bool("headless", false, "run the browser in headless mode")
 	meliCmd.Flags().Int("workers", 2, "number of concurrent workers to scrape product pages, defaults to 2")
+	meliCmd.Flags().String("browser", "chrome", "options are chromium, firefox")
 	rootCmd.AddCommand(meliCmd)
 }

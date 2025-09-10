@@ -7,6 +7,17 @@ const (
 	BrowserTypeFirefox  BrowserType = "firefox"
 )
 
+func GetBrowserType(s string) BrowserType {
+	switch s {
+	case string(BrowserTypeChromium):
+		return BrowserTypeChromium
+	case string(BrowserTypeFirefox):
+		return BrowserTypeFirefox
+	default:
+		return BrowserTypeChromium
+	}
+}
+
 type GejieConfig struct {
 	BrowserHeadlessMode bool
 	BrowserTimeout      float64
