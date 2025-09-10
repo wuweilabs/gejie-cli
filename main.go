@@ -61,7 +61,7 @@ func devTest() {
 
 	} else if len(os.Args) > 1 && os.Args[1] == "--meli-product-links" {
 		searchUrlPe := "https://listado.mercadolibre.com.pe/teclado-mecanico"
-		bm, _ := gejie.NewBrowserManager(gejie.DefaultBrowserOptions())
+		bm, _ := gejie.NewBrowserManager(gejie.DefaultBrowserOptions(), opts)
 		page, _ := bm.NewPage()
 		page.Goto(searchUrlPe, playwright.PageGotoOptions{
 			Timeout: playwright.Float(8000),
