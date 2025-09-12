@@ -298,6 +298,10 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []meli.MeliProduct {
 		scrapeProducts = append(scrapeProducts, prd)
 	}
 	slog.Info("total meli products scraped", "count", len(scrapeProducts))
+	if len(scrapeProducts) == 0 {
+		slog.Error("no products scraped successfully; all product pages failed")
+		return nil
+	}
 	slog.Info("first product scraped")
 	utils.PrintProduct(scrapeProducts[0])
 
