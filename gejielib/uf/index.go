@@ -1,7 +1,7 @@
 package uf
 
 import (
-	"fmt"
+	"log/slog"
 	"sync"
 )
 
@@ -56,7 +56,7 @@ func (f *URLFrontier) Add(url string) {
 	if _, exists := f.urls[url]; !exists {
 		f.urls[url] = StatusPending
 	} else {
-		fmt.Printf("url already exists (%s)", url)
+		slog.Warn("url already exists", "url", url)
 	}
 }
 

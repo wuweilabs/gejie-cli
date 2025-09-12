@@ -1,7 +1,7 @@
 package meli
 
-import "fmt"
+import "log/slog"
 
 func FromStore() {
-	fmt.Printf("start scrape from store page")
+	slog.Info("start scrape from store page")
 }

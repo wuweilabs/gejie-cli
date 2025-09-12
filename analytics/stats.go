@@ -1,9 +1,9 @@
 package analytics
 
-import gejie "github.com/zshanhui/gejiezhipin/gejielib"
+import "github.com/zshanhui/gejiezhipin/gejielib/meli"
 
 // funcs for common statistical analysis
 
-func GetProductStats(products []gejie.MeliProduct) {
+func GetProductStats(products []meli.MeliProduct) {
 
 }

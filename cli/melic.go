@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -19,14 +19,26 @@ var meliCmd = &cobra.Command{
 		url, _ := cmd.Flags().GetString("url")
 		createCsv, _ := cmd.Flags().GetBool("create-csv")
 		headlessMode, _ := cmd.Flags().GetBool("headless")
+		workers, _ := cmd.Flags().GetInt("workers")
+		browserStr, _ := cmd.Flags().GetString("browser")
 
-		fmt.Printf("maxItems: %d, onlyImages: %t, url: %s, createCsv: %t, headless: %t",
-			maxItems, onlyImages, url, createCsv, headlessMode)
+		browserType := gejie.GetBrowserType(browserStr)
+
+		slog.Info("meli command options",
+			"maxItems", maxItems,
+			"onlyImages", onlyImages,
+			"url", url,
+			"createCsv", createCsv,
+			"headless", headlessMode,
+			"workers", workers,
+		)
 		routeMeliUrl(url, gejie.CmdOptions{
 			MaxItems:     maxItems,
 			OnlyImages:   onlyImages,
 			CreateCsv:    createCsv,
 			HeadlessMode: headlessMode,
+			Workers:      workers,
+			Browser:      browserType,
 		})
 	},
 }
@@ -36,7 +48,7 @@ var listUrlPrefixes = []string{"https://listado.mercadolibre", "listado.mercadol
 
 func routeMeliUrl(url string, opts gejie.CmdOptions) {
 	if url == "" {
-		fmt.Printf("url is empty, please provide a valid meli url")
+		slog.Error("url is empty, please provide a valid meli url")
 		return
 	}
 
@@ -59,26 +71,26 @@ func routeMeliUrl(url string, opts gejie.CmdOptions) {
 	// ./gejiec meli --url https://articulo.mercadolibre.com.mx/MLM-1411526559-silla-gamer-reclinable-giratoria-ergonomica-super-comoda-_JM
 	if isProductUrl {
 		if opts.OnlyImages {
-			fmt.Printf("\nscraping only product images: %s", url)
+			slog.Info("scraping only product images", "url", url)
 			images := gejie.ScrapeProductImages(nil, url)
 			// just print for now
 			for _, image := range images {
-				fmt.Println(image)
+				slog.Info(image)
 			}
 			return
 		}
 
-		fmt.Printf("\nscraping product url: %s", url)
-		product := gejie.ScrapeProductPageDirect(url)
+		slog.Info("scraping product url", "url", url)
+		product := gejie.ScrapeProductPageDirect(url, opts)
 		utils.PrintProduct(product)
 
 		// ./gejiec meli --url https://listado.mercadolibre.com.mx/carburador-stihl --max-items 5 --create-csv
 	} else if isListUrl {
-		fmt.Printf("\nscraping list url: %s", url)
+		slog.Info("scraping list url", "url", url)
 		gejie.RunMeliSearch(&url, opts)
 
 	} else {
-		fmt.Printf("url is not a valid meli, url: %s", url)
+		slog.Error("url is not a valid meli", "url", url)
 	}
 }
 
@@ -88,5 +100,7 @@ func init() {
 	meliCmd.Flags().Bool("only-images", false, "only scrape the images from given product url, no other data will be scraped")
 	meliCmd.Flags().Bool("create-csv", false, "create a csv file of the scraped products")
 	meliCmd.Flags().Bool("headless", false, "run the browser in headless mode")
+	meliCmd.Flags().Int("workers", 2, "number of concurrent workers to scrape product pages, defaults to 2")
+	meliCmd.Flags().String("browser", "chrome", "options are chromium, firefox")
 	rootCmd.AddCommand(meliCmd)
 }
