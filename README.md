@@ -60,3 +60,8 @@ Available flags for `meli`:
 - `--only-images` (bool): Only scrape image URLs from a product page.
 - `--create-csv` (bool): Write scraped listing products to a CSV file.
 - `--headless` (bool): Run browser automation in headless mode.
+
+## Feature Roadmap
+
+- add product stats using Go and example `python-notebooks`
+- add support residential proxies

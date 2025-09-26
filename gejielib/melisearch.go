@@ -1,198 +1,24 @@
 package gejie
 
 import (
-	"fmt"
 	"log"
 	"log/slog"
 	"math/rand"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/playwright-community/playwright-go"
+	"github.com/zshanhui/gejiezhipin/gejielib/adapters"
+	br "github.com/zshanhui/gejiezhipin/gejielib/browser"
 	"github.com/zshanhui/gejiezhipin/gejielib/meli"
 	"github.com/zshanhui/gejiezhipin/gejielib/uf"
 	"github.com/zshanhui/gejiezhipin/utils"
 )
 
-var jlog = slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-type CmdOptions struct {
-	MaxItems     int
-	OnlyImages   bool
-	CreateCsv    bool
-	HeadlessMode bool
-	Workers      int
-	Browser      BrowserType
-}
-
-type BrowserManager struct {
-	pw      *playwright.Playwright
-	browser playwright.Browser
-	context playwright.BrowserContext
-}
-
-type BrowserOptions struct {
-	Headless    bool
-	BlockImages bool
-	BlockMedia  bool
-	BlockFonts  bool
-	UserAgent   string
-	Timeout     float64
-}
-
-var gejieConfig = DefaultGejieConfig()
-
-func DefaultBrowserOptions() *BrowserOptions {
-	return &BrowserOptions{
-		Headless:    gejieConfig.BrowserHeadlessMode,
-		BlockImages: true,
-		BlockMedia:  true,
-		BlockFonts:  true,
-		UserAgent:   UserAgentChrome,
-		// UserAgent:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-		Timeout: 15000,
-	}
-}
-
-func createBrowser(pw *playwright.Playwright, opts *BrowserOptions, cmdOpts CmdOptions) (playwright.Browser, error) {
-	var browser playwright.Browser
-	var err error
-	launchOpts := playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(opts.Headless),
-		Timeout:  playwright.Float(opts.Timeout),
-		Args: []string{
-			string(disableBlinkFeaturesAutomationControlled),
-			string(noSandbox),
-		},
-	}
-
-	switch cmdOpts.Browser {
-	case BrowserTypeFirefox:
-		browser, err = pw.Firefox.Launch(launchOpts)
-		if err != nil {
-			return nil, err
-		}
-	case BrowserTypeChromium:
-		if opts.Headless {
-			// always use Firefox if headless mode since Chrome does not work headless
-			slog.Info("running browser in Firefox headless mode")
-			browser, err = pw.Firefox.Launch(launchOpts)
-			if err != nil {
-				return nil, err
-			}
-			// launchOpts.Args = append(launchOpts.Args, string("--headless=new"))
-			// launchOpts.Args = append(launchOpts.Args, string("--disable-dev-shm-usage"))
-		} else {
-			browser, err = pw.Chromium.Launch(launchOpts)
-			if err != nil {
-				return nil, err
-			}
-		}
-	default:
-		return nil, fmt.Errorf("browser type not supported: %s", cmdOpts.Browser)
-	}
-	return browser, nil
-}
-
-func NewBrowserManager(opts *BrowserOptions, cmdOpts CmdOptions) (*BrowserManager, error) {
-	if opts == nil {
-		opts = DefaultBrowserOptions()
-	}
-
-	pw, err := playwright.Run()
-	if err != nil {
-		return nil, err
-	}
-
-	newBrowser, err := createBrowser(pw, opts, cmdOpts)
-	if err != nil {
-		pw.Stop()
-		return nil, err
-	}
-
-	context, err := newBrowser.NewContext(playwright.BrowserNewContextOptions{
-		UserAgent: playwright.String(opts.UserAgent),
-	})
-	if err != nil {
-		newBrowser.Close()
-		pw.Stop()
-		return nil, err
-	}
-
-	context.On("request", func(req playwright.Request) {
-		jlog.Info("on request information", "method", req.Method(), "url", req.URL(), "headers", req.Headers())
-	})
-	context.On("response", func(res playwright.Response) {
-		jlog.Info("on response information", "response.status",
-			res.Status(), "response.url", res.URL(), "resp.headers", res.Headers())
-	})
-
-	if opts.BlockImages || opts.BlockMedia || opts.BlockFonts {
-		context.Route("**/*", func(route playwright.Route) {
-			rt := route.Request().ResourceType()
-			switch rt {
-			case "image":
-				if opts.BlockImages {
-					route.Abort()
-					return
-				}
-			case "media":
-				if opts.BlockMedia {
-					route.Abort()
-					return
-				}
-			case "font":
-				if opts.BlockFonts {
-					route.Abort()
-					return
-				}
-			}
-			route.Continue()
-		})
-	}
-
-	return &BrowserManager{
-		pw:      pw,
-		browser: newBrowser,
-		context: context,
-	}, nil
-}
-
-func (bm *BrowserManager) NewPage() (playwright.Page, error) {
-	return bm.context.NewPage()
-}
-
-func (bm *BrowserManager) ClosePage(page playwright.Page) {
-	if page != nil {
-		page.Close()
-	}
-}
-
-func (bm *BrowserManager) Close() {
-	if bm.context != nil {
-		bm.context.Close()
-	}
-	if bm.browser != nil {
-		bm.browser.Close()
-	}
-	if bm.pw != nil {
-		bm.pw.Stop()
-	}
-}
-
-func (bm *BrowserManager) GetContext() playwright.BrowserContext {
-	return bm.context
-}
-
-func (bm *BrowserManager) GetBrowser() playwright.Browser {
-	return bm.browser
-}
-
-func RunMeliSearch(searchUrl *string, opts CmdOptions) []meli.MeliProduct {
+func RunMeliSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
 	if searchUrl == nil {
 		defaultUrl := exampleMercadoLibreKeyboard
 		searchUrl = &defaultUrl
@@ -203,13 +29,13 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []meli.MeliProduct {
 	}
 	defer pw.Stop()
 
-	browserOpts := DefaultBrowserOptions()
+	browserOpts := br.DefaultBrowserOptions()
 	browserOpts.Headless = false
 	if opts.HeadlessMode {
 		browserOpts.Headless = true
 	}
 
-	browser, err := createBrowser(pw, browserOpts, opts)
+	browser, err := br.CreateBrowser(pw, browserOpts, opts)
 	if err != nil {
 		log.Fatalf("could not launch browser: %v", err)
 	}
@@ -319,119 +145,17 @@ func RunMeliSearch(searchUrl *string, opts CmdOptions) []meli.MeliProduct {
 	return scrapeProducts
 }
 
-func ScrapeSinglePageProductLinks(page playwright.Page) ([]string, error) {
-	productLinksTimer := utils.NewTimer("Scrape Per Page Product Links")
-	defer productLinksTimer.LogElapsed()
-
-	productLinks, err := page.Locator(productLinksSelector).All()
-	if err != nil {
-		return []string{}, fmt.Errorf("could not extract product links: %w", err)
-	}
-
-	productLinkUrls := []string{}
-	baseURL, _ := url.Parse(page.URL())
-	for _, productLink := range productLinks {
-		linkUrl, err := productLink.GetAttribute("href")
-
-		// skip click1 links since they are not product links
-		if strings.HasPrefix(linkUrl, "https://click1") {
-			continue
-		}
-		if err != nil {
-			log.Fatalf("could not parse product link url")
-			continue
-		}
-		if linkUrl == "" {
-			continue
-		}
-
-		ref, err := url.Parse(linkUrl)
-		if err != nil {
-			// skip malformed URLs
-			continue
-		}
-		abs := baseURL.ResolveReference(ref)
-		// strip query params and fragments
-		abs.RawQuery = ""
-		abs.Fragment = ""
-
-		productLinkUrls = append(productLinkUrls, abs.String())
-	}
-
-	return productLinkUrls, nil
-}
-
 func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []string {
-	allProductLinks := []string{}
-	currentPage := 1
-
-	for len(allProductLinks) < maxItems {
-		slog.Info("scraping page", "page", currentPage)
-
-		curPageProductLinks, err := ScrapeSinglePageProductLinks(page)
-		if err != nil {
-			slog.Error("error scraping product links", "error", err)
-			return []string{}
-		}
-		slog.Info("found product links on page", "count", len(curPageProductLinks), "page", currentPage)
-		if len(curPageProductLinks) == 0 {
-			slog.Error("no product links found on page, stopping pagination")
-			return []string{}
-		}
-
-		remainingItems := maxItems - len(allProductLinks)
-		if len(curPageProductLinks) <= remainingItems {
-			allProductLinks = append(allProductLinks, curPageProductLinks...)
-		} else {
-			allProductLinks = append(allProductLinks, curPageProductLinks[:remainingItems]...)
-		}
-
-		if len(allProductLinks) >= maxItems {
-			slog.Info("reached max items, stopping pagination", "maxItems", maxItems)
-			break
-		}
-
-		// next page
-		nextButton := page.Locator(string(paginationNextButtonSelector))
-		nextExists, err := nextButton.Count()
-		if err != nil {
-			log.Printf("error checking next page button: %v", err)
-			break
-		}
-		if nextExists == 0 {
-			slog.Info("no more pages available, stopping pagination")
-			break
-		}
-
-		// click next button
-		err = nextButton.Click()
-		if err != nil {
-			log.Printf("error clicking next page button: %s", err)
-			break
-		}
-
-		err = page.Locator(string(productLinksSelector)).Last().WaitFor(playwright.LocatorWaitForOptions{
-			State:   playwright.WaitForSelectorStateAttached,
-			Timeout: playwright.Float(5000),
-		})
-		if err != nil {
-			log.Printf("error waiting for next page to load: %v", err)
-			break
-		}
-
-		// Sleep for 1-3 seconds between pages
-		coupleSecs := 1 + rand.Intn(3)
-		slog.Info("sleeping between pages", "seconds", coupleSecs)
-		time.Sleep(time.Duration(coupleSecs) * time.Second)
-		currentPage++
+	opts := adapters.ScrapeProductLinkPageOpts{
+		MaxItems:               maxItems,
+		ProductLinkSelector:    productLinksSelector,
+		PaginationNextSelector: string(paginationNextButtonSelector),
 	}
-
-	slog.Info("total products links scraped", "pages", currentPage, "count", len(allProductLinks))
-	return allProductLinks
+	return adapters.ScrapeProductLinksWithPagination(page, opts)
 }
 
-func ScrapeProductPageDirect(url string, opts CmdOptions) *meli.MeliProduct {
-	bm, err := NewBrowserManager(&BrowserOptions{
+func ScrapeProductPageDirect(url string, opts br.CmdOptions) *meli.MeliProduct {
+	bm, err := br.NewBrowserManager(&br.BrowserOptions{
 		Headless:    opts.HeadlessMode,
 		BlockImages: false,
 		BlockMedia:  false,
@@ -441,10 +165,11 @@ func ScrapeProductPageDirect(url string, opts CmdOptions) *meli.MeliProduct {
 		slog.Error("could not create browser manager", "error", err)
 	}
 
-	return scrapeProductPage(bm.browser, url)
+	return scrapeProductPage(bm.GetBrowser(), url)
 }
 
 func scrapeProductPage(browser playwright.Browser, url string) *meli.MeliProduct {
+	gejieConfig := br.DefaultGejieConfig()
 	productTimer := utils.NewTimer("Individual Product Page")
 	defer productTimer.LogElapsed()
 
@@ -607,12 +332,12 @@ func ScrapeProductImages(page playwright.Page, url string) []string {
 	var productPage playwright.Page
 	if page == nil {
 		// direct scrape from url
-		opts := DefaultBrowserOptions()
+		opts := br.DefaultBrowserOptions()
 		opts.BlockImages = false
 		opts.BlockMedia = false
 		opts.BlockFonts = false
-		bm, err := NewBrowserManager(opts, CmdOptions{
-			Browser: BrowserTypeFirefox,
+		bm, err := br.NewBrowserManager(opts, br.CmdOptions{
+			Browser: br.BrowserTypeFirefox,
 		})
 		if err != nil {
 			log.Fatalf("could not create browser manager: %v", err)
