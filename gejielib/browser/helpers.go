@@ -93,7 +93,36 @@ func CreateBrowser(pw *playwright.Playwright, opts *BrowserOptions, cmdOpts CmdO
 	return browser, nil
 }
 
+type SupportedCommerceSite int
+
+const (
+	NotSupported SupportedCommerceSite = iota
+	MercadoLibre
+	DHGate
+)
+
+func (scs SupportedCommerceSite) String() string {
+	notSupported := ""
+	return [...]string{
+		notSupported,
+		"meli",
+		"dhgate",
+	}[scs]
+}
+
+func ParseCommerceSite(site string) SupportedCommerceSite {
+	switch site {
+	case "meli":
+		return MercadoLibre
+	case "dhgate":
+		return DHGate
+	default:
+		return NotSupported
+	}
+}
+
 type CmdOptions struct {
+	Site         SupportedCommerceSite
 	MaxItems     int
 	OnlyImages   bool
 	CreateCsv    bool

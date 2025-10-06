@@ -2,6 +2,8 @@ package gejie
 
 type CssSelector string
 
+// needs refactoring to adapter specific selector constants
+
 const ProductUrlExample = "https://articulo.mercadolibre.com.mx/MLM-1411526559-silla-gamer-reclinable-giratoria-ergonomica-super-comoda-_JM"
 const exampleMercadoLibreXiaoMi15 = "https://listado.mercadolibre.com.pe/xiaomi-15"
 const exampleMercadoLibreKeyboard = "https://listado.mercadolibre.com.pe/teclado-mecanico"

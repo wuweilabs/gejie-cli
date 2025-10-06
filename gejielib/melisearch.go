@@ -75,7 +75,7 @@ func RunMeliSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
 
 	slog.Info("page loaded, proceeding to scrape links")
 
-	productLinks := ScrapeProductLinksWithPagination(pageIndex, int(opts.MaxItems))
+	productLinks := ScrapeProductLinksWithPaginationHelper(pageIndex, int(opts.MaxItems))
 	if len(productLinks) == 0 {
 		slog.Error("no product links found, potential blocked by mercadolibre due to local vpn use, stopping")
 		return nil
@@ -145,7 +145,7 @@ func RunMeliSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
 	return scrapeProducts
 }
 
-func ScrapeProductLinksWithPagination(page playwright.Page, maxItems int) []string {
+func ScrapeProductLinksWithPaginationHelper(page playwright.Page, maxItems int) []string {
 	opts := adapters.ScrapeProductLinkPageOpts{
 		MaxItems:               maxItems,
 		ProductLinkSelector:    productLinksSelector,
