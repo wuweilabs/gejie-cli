@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/playwright-community/playwright-go"
+	br "github.com/zshanhui/gejiezhipin/gejielib/browser"
 	"github.com/zshanhui/gejiezhipin/utils"
 )
 
@@ -60,6 +61,9 @@ func ScrapeSinglePageProductLinks(page playwright.Page, productLinkSelector stri
 func ScrapeProductLinksWithPagination(page playwright.Page, opts ScrapeProductLinkPageOpts) []string {
 	allProductLinks := []string{}
 	currentPage := 1
+	if opts.Site == br.DHGate {
+		currentPage = 0
+	}
 
 	for len(allProductLinks) < opts.MaxItems {
 		slog.Info("scraping page", "page", currentPage)
@@ -87,23 +91,50 @@ func ScrapeProductLinksWithPagination(page playwright.Page, opts ScrapeProductLi
 			break
 		}
 
-		// next page
-		nextButton := page.Locator(string(opts.PaginationNextSelector))
-		nextExists, err := nextButton.Count()
-		if err != nil {
-			log.Printf("error checking next page button: %v", err)
-			break
-		}
-		if nextExists == 0 {
-			slog.Info("no more pages available, stopping pagination")
-			break
-		}
+		if opts.PaginationNextSelector != "" {
+			slog.Info("paginating using next button", "PaginationNextSelector", opts.PaginationNextSelector)
+			// use next page button if site supports
+			nextButton := page.Locator(string(opts.PaginationNextSelector))
+			nextExists, err := nextButton.Count()
+			if err != nil {
+				log.Printf("error checking next page button: %v", err)
+				break
+			}
+			if nextExists == 0 {
+				slog.Info("no more pages available, stopping pagination")
+				break
+			}
 
-		// click next button
-		err = nextButton.Click()
-		if err != nil {
-			log.Printf("error clicking next page button: %s", err)
-			break
+			// click next button
+			err = nextButton.Click()
+			if err != nil {
+				log.Printf("error clicking next page button: %s", err)
+				break
+			}
+		} else {
+			slog.Info("navigating using url query page param", "PaginationPageQueryParam", opts.PaginationPageQueryParam)
+			if opts.PaginationPageQueryParam == "" {
+				slog.Error("Error: opts.PaginationPageQueryParam should be set if using direct query pagination (PaginationNextSelector not set)")
+				break
+			}
+			// use page url query directly to paginate because next button does not work well
+			currentPageUrl, err := url.Parse(page.URL())
+			if err != nil {
+				slog.Error("could not parse current page url")
+				break
+			}
+			q := currentPageUrl.Query()
+			nextPageNum := currentPage + 1
+			q.Set(opts.PaginationPageQueryParam, fmt.Sprintf("%d", nextPageNum))
+			currentPageUrl.RawQuery = q.Encode()
+			nextPageUrl := currentPageUrl.String()
+
+			_, err = page.Goto(nextPageUrl, playwright.PageGotoOptions{
+				Timeout: playwright.Float(8000),
+			})
+			if err != nil {
+				log.Printf("error navigation to next page using direct url - %s", err.Error())
+			}
 		}
 
 		err = page.Locator(string(opts.ProductLinkSelector)).Last().WaitFor(playwright.LocatorWaitForOptions{
@@ -127,7 +158,9 @@ func ScrapeProductLinksWithPagination(page playwright.Page, opts ScrapeProductLi
 }
 
 type ScrapeProductLinkPageOpts struct {
-	MaxItems               int
-	ProductLinkSelector    string
-	PaginationNextSelector string
+	Site                     br.SupportedCommerceSite
+	MaxItems                 int
+	ProductLinkSelector      string
+	PaginationNextSelector   string
+	PaginationPageQueryParam string // must set if PaginationNextSelector is empty
 }

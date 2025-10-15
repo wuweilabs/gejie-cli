@@ -3,7 +3,9 @@ package browser
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/playwright-community/playwright-go"
 )
@@ -99,6 +101,7 @@ const (
 	NotSupported SupportedCommerceSite = iota
 	MercadoLibre
 	DHGate
+	OneSix88
 )
 
 func (scs SupportedCommerceSite) String() string {
@@ -110,9 +113,27 @@ func (scs SupportedCommerceSite) String() string {
 	}[scs]
 }
 
-func ParseCommerceSite(site string) SupportedCommerceSite {
-	switch site {
-	case "meli":
+func ParseCommerceSite(u string) SupportedCommerceSite {
+	// "https://www.dhgate.com/wholesale/search.do?act=search&dspm=pcen.hp.searclick.1.Ney2Ndh7uXiBpaf1n8JF%26resource_id%3D&catalog=&sus=&searchkey=cat+toys"
+	// -> dhgate|mercadolibre|1688
+
+	parsedUrl, err := url.Parse(u)
+	if err != nil {
+		return NotSupported
+	}
+	host := parsedUrl.Hostname()
+	// Remove "www." prefix if present
+	if after, ok := strings.CutPrefix(host, "www."); ok {
+		host = after
+	}
+	// Remove TLD (.com, .pe, etc.)
+	parts := strings.Split(host, ".")
+	if len(parts) > 1 {
+		host = parts[0]
+	}
+
+	switch host {
+	case "mercadolibre":
 		return MercadoLibre
 	case "dhgate":
 		return DHGate

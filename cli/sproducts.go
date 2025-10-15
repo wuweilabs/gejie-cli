@@ -18,7 +18,6 @@ var scrapeProductsCmd = &cobra.Command{
 	Short: "scrape eCommerce product listings, store pages, and analytics",
 	Long:  "scrape eCommerce product listings, store pages, and analytics",
 	Run: func(cmd *cobra.Command, args []string) {
-		site, _ := cmd.Flags().GetString("site")
 		maxItems, _ := cmd.Flags().GetInt("max-items")
 		onlyImages, _ := cmd.Flags().GetBool("only-images")
 		url, _ := cmd.Flags().GetString("url")
@@ -29,7 +28,11 @@ var scrapeProductsCmd = &cobra.Command{
 
 		browserType := br.GetBrowserType(browserStr)
 
-		commerceSite := br.ParseCommerceSite(site)
+		commerceSite := br.ParseCommerceSite(url)
+		if commerceSite == br.NotSupported {
+			panic("unsupported commerce site")
+		}
+		slog.Info("supported commerce site detected", "site", commerceSite)
 
 		slog.Info("scrape-products command options",
 			"maxItems", maxItems,
@@ -66,9 +69,13 @@ func routeSiteProductUrl(url string, opts br.CmdOptions) {
 
 	switch opts.Site {
 	case br.MercadoLibre:
+		slog.Info("route handle dhgate products search")
 		RouteMeli(url, opts)
 	case br.DHGate:
-		slog.Info("handle dhgate products search")
+		slog.Info("route handle dhgate products search")
+		RouteDhgate(url, opts)
+	case br.OneSix88:
+		slog.Info("handle 1688 search, not yet supported")
 	default:
 		slog.Warn("unsupported site", "url", url)
 	}
@@ -151,7 +158,7 @@ func routeUrls(url string, opts br.CmdOptions, rOpts RouteOptions) {
 				"site", opts.Site.String())
 		}
 	} else {
-		slog.Error("not a valid url pattern for mercadolibre", "url", url)
+		slog.Error("not a valid url pattern for dhgate", "url", url)
 	}
 }
 

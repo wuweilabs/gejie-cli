@@ -1,8 +1,10 @@
 package adapters
 
 import (
+	"fmt"
 	"log"
 	"log/slog"
+	"time"
 
 	"github.com/playwright-community/playwright-go"
 	br "github.com/zshanhui/gejiezhipin/gejielib/browser"
@@ -28,7 +30,7 @@ func RunDhgateSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
 
 	// lets implement the manual way first, then think about DRY'ing it up later with generalized pattern
 
-	if searchUrl != nil {
+	if searchUrl == nil {
 		searchUrl = &exampleSearchUrl
 	}
 
@@ -82,13 +84,24 @@ func RunDhgateSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
 		opts.MaxItems = 250
 	}
 	linkOpts := ScrapeProductLinkPageOpts{
-		MaxItems:               int(opts.MaxItems),
-		ProductLinkSelector:    "div.product-list-warp div.product-item",
-		PaginationNextSelector: "span.next-btn",
+		Site:                     opts.Site,
+		MaxItems:                 int(opts.MaxItems),
+		ProductLinkSelector:      "div.gallery-pro-name > a",
+		PaginationNextSelector:   "",
+		PaginationPageQueryParam: "pageNum",
 	}
 	productLinks := ScrapeProductLinksWithPagination(searchIndexPage, linkOpts)
+	if len(productLinks) == 0 {
+		return []meli.MeliProduct{}
+	}
 
-	slog.Info("total product links scraped", "count", len(productLinks), "firstLink", productLinks[0], "lastLink", productLinks[len(productLinks)-1])
+	// Add one second delay
+	time.Sleep(1 * time.Second)
+
+	slog.Info("total product links scraped", "count",
+		len(productLinks), "firstLink", productLinks[0], "lastLink", productLinks[len(productLinks)-1])
+
+	fmt.Print("all product links", productLinks)
 
 	return []meli.MeliProduct{}
 }
