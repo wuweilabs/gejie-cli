@@ -12,7 +12,7 @@ type Price struct {
 	CurrencyCode utils.CurrencyCode
 }
 
-type MeliProduct struct {
+type GejieProductListing struct {
 	Title              string
 	Price              Price
 	Url                string
@@ -22,24 +22,24 @@ type MeliProduct struct {
 	SoldMoreThan       *uint32
 	EstimatedSoldCount *uint32
 	DescriptionContent string
-	StoreInfo          MeliStoreInfo
+	StoreInfo          StoreInfo
 }
 
-type MeliStoreInfo struct {
+type StoreInfo struct {
 	Name                 string
 	Url                  string
 	LogoImageSrc         string
 	LogoImageSrcOriginal string
 }
 
-func ScrapeProductPageDummy(browser playwright.Browser, url string) *MeliProduct {
+func ScrapeProductPageDummy(browser playwright.Browser, url string) *GejieProductListing {
 	time.Sleep(time.Duration(3) * time.Second)
 
 	reviewCount := uint32(123)
 	reviewScore := float32(4.5)
 	soldMoreThan := uint32(50)
 	estimatedSold := uint32(75)
-	return &MeliProduct{
+	return &GejieProductListing{
 		Title:              "Sample Product Title",
 		Price:              Price{AmountCents: 1999, CurrencyCode: utils.CurrencyCode("USD")},
 		Url:                url,
@@ -49,7 +49,7 @@ func ScrapeProductPageDummy(browser playwright.Browser, url string) *MeliProduct
 		SoldMoreThan:       &soldMoreThan,
 		EstimatedSoldCount: &estimatedSold,
 		DescriptionContent: "This is a sample product description for demonstration purposes.",
-		StoreInfo: MeliStoreInfo{
+		StoreInfo: StoreInfo{
 			Name:                 "Sample Store",
 			Url:                  "https://example.com/store",
 			LogoImageSrc:         "https://example.com/logo.jpg",

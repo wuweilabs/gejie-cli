@@ -26,7 +26,7 @@ func blockIndexMediaFiles(ctx playwright.BrowserContext) {
 	})
 }
 
-func RunDhgateSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
+func RunDhgateSearch(searchUrl *string, opts br.CmdOptions) []meli.GejieProductListing {
 
 	// lets implement the manual way first, then think about DRY'ing it up later with generalized pattern
 
@@ -92,7 +92,7 @@ func RunDhgateSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
 	}
 	productLinks := ScrapeProductLinksWithPagination(searchIndexPage, linkOpts)
 	if len(productLinks) == 0 {
-		return []meli.MeliProduct{}
+		return []meli.GejieProductListing{}
 	}
 
 	// Add one second delay
@@ -103,10 +103,10 @@ func RunDhgateSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
 
 	fmt.Print("all product links", productLinks)
 
-	return []meli.MeliProduct{}
+	return []meli.GejieProductListing{}
 }
 
-func ScrapeDhgateProductPage(br playwright.Browser, url string) *meli.MeliProduct {
+func ScrapeDhgateProductPage(br playwright.Browser, url string) *meli.GejieProductListing {
 
-	return &meli.MeliProduct{}
+	return &meli.GejieProductListing{}
 }

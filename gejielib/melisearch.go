@@ -18,7 +18,7 @@ import (
 	"github.com/zshanhui/gejiezhipin/utils"
 )
 
-func RunMeliSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
+func RunMeliSearch(searchUrl *string, opts br.CmdOptions) []meli.GejieProductListing {
 	if searchUrl == nil {
 		defaultUrl := exampleMercadoLibreKeyboard
 		searchUrl = &defaultUrl
@@ -87,7 +87,7 @@ func RunMeliSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
 		numWorkers = 1
 	}
 	// jobs := make(chan string)
-	results := make(chan meli.MeliProduct, len(productLinks))
+	results := make(chan meli.GejieProductListing, len(productLinks))
 
 	urlFrontier := uf.NewURLFrontier()
 	urlFrontier.BulkAdd(productLinks)
@@ -119,7 +119,7 @@ func RunMeliSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
 
 	go func() { wg.Wait(); close(results) }()
 
-	scrapeProducts := []meli.MeliProduct{}
+	scrapeProducts := []meli.GejieProductListing{}
 	for prd := range results {
 		scrapeProducts = append(scrapeProducts, prd)
 	}
@@ -139,7 +139,7 @@ func RunMeliSearch(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct {
 
 	if opts.CreateCsv {
 		slog.Info("creating csv", "path", searchUrlParsed.Path, "count", len(scrapeProducts))
-		CreateMeliProductCsv(scrapeProducts, searchUrlParsed.Path, false)
+		CreateProductCsv(scrapeProducts, searchUrlParsed.Path, false)
 	}
 
 	return scrapeProducts
@@ -154,7 +154,7 @@ func ScrapeProductLinksWithPaginationHelper(page playwright.Page, maxItems int) 
 	return adapters.ScrapeProductLinksWithPagination(page, opts)
 }
 
-func ScrapeProductPageDirect(url string, opts br.CmdOptions) *meli.MeliProduct {
+func ScrapeProductPageDirect(url string, opts br.CmdOptions) *meli.GejieProductListing {
 	bm, err := br.NewBrowserManager(&br.BrowserOptions{
 		Headless:    opts.HeadlessMode,
 		BlockImages: false,
@@ -168,7 +168,7 @@ func ScrapeProductPageDirect(url string, opts br.CmdOptions) *meli.MeliProduct {
 	return scrapeProductPage(bm.GetBrowser(), url)
 }
 
-func scrapeProductPage(browser playwright.Browser, url string) *meli.MeliProduct {
+func scrapeProductPage(browser playwright.Browser, url string) *meli.GejieProductListing {
 	gejieConfig := br.DefaultGejieConfig()
 	productTimer := utils.NewTimer("Individual Product Page")
 	defer productTimer.LogElapsed()
@@ -290,7 +290,7 @@ func scrapeProductPage(browser playwright.Browser, url string) *meli.MeliProduct
 
 	content := scrapeProductDescription(productPage)
 
-	product := meli.MeliProduct{
+	product := meli.GejieProductListing{
 		Title: productName,
 		Price: meli.Price{
 			AmountCents:  amountInt + amountCentsInt,
@@ -401,7 +401,7 @@ func scrapeSoldCount(page playwright.Page) *uint32 {
 	return soldCount
 }
 
-func scrapeStoreInfo(page playwright.Page) meli.MeliStoreInfo {
+func scrapeStoreInfo(page playwright.Page) meli.StoreInfo {
 	storeNameElem := page.Locator(string(storeNameSelector)).First()
 	storeName, err := storeNameElem.TextContent()
 	if err != nil {
@@ -427,7 +427,7 @@ func scrapeStoreInfo(page playwright.Page) meli.MeliStoreInfo {
 			imageSrc = ""
 		}
 	}
-	return meli.MeliStoreInfo{
+	return meli.StoreInfo{
 		Name:                 storeName,
 		Url:                  storeUrl,
 		LogoImageSrcOriginal: imageSrc,

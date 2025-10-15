@@ -20,7 +20,7 @@ const ColombianPesoUsdRate CurrencyRate = 0.00025
 
 // createMeliProductCsv creates a CSV file from a slice of MeliProduct
 // The filename will have the current epoch time appended to it
-func CreateMeliProductCsv(products []meli.MeliProduct, baseFilename string, useChineseHeaders bool) error {
+func CreateProductCsv(products []meli.GejieProductListing, baseFilename string, useChineseHeaders bool) error {
 	slog.Info("creating csv document", "baseFilename", baseFilename, "count", len(products))
 	// Append epoch timestamp to filename
 	epoch := time.Now().Unix()
