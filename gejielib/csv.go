@@ -20,7 +20,7 @@ const ColombianPesoUsdRate CurrencyRate = 0.00025
 
 // createMeliProductCsv creates a CSV file from a slice of MeliProduct
 // The filename will have the current epoch time appended to it
-func CreateMeliProductCsv(products []meli.MeliProduct, baseFilename string, useChineseHeaders bool) error {
+func CreateProductCsv(products []meli.GejieProductListing, baseFilename string, useChineseHeaders bool) error {
 	slog.Info("creating csv document", "baseFilename", baseFilename, "count", len(products))
 	// Append epoch timestamp to filename
 	epoch := time.Now().Unix()
@@ -102,7 +102,8 @@ func CreateMeliProductCsv(products []meli.MeliProduct, baseFilename string, useC
 			soldMoreThan = strconv.FormatUint(uint64(*product.SoldMoreThan), 10)
 		}
 
-		amountDecimal := float32(product.Price.AmountCents) / 100
+		mediumPrice := (product.Price.AmountCentsMax + product.Price.AmountCentsMin) / 2
+		amountDecimal := float32(mediumPrice) / 100
 		oCurrencyAmount := fmt.Sprintf("%.2f", amountDecimal)
 		//  only Peruvian Soles is supported for now
 		usdPriceAmount := fmt.Sprintf("%.2f", amountDecimal*float32(PeruvianSolUsdRate))

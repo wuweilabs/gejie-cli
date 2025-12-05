@@ -1,4 +1,4 @@
-package gejie
+package browser
 
 type BrowserType string
 
@@ -15,20 +15,6 @@ func GetBrowserType(s string) BrowserType {
 		return BrowserTypeFirefox
 	default:
 		return BrowserTypeChromium
-	}
-}
-
-type GejieConfig struct {
-	BrowserHeadlessMode bool
-	BrowserTimeout      float64
-	BrowserType         BrowserType
-}
-
-func DefaultGejieConfig() *GejieConfig {
-	return &GejieConfig{
-		BrowserHeadlessMode: true,
-		BrowserTimeout:      15000,
-		BrowserType:         BrowserTypeChromium,
 	}
 }
 

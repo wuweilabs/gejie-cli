@@ -26,31 +26,31 @@ Run MercadoLibre scraper (`meli` subcommand):
 - **Scrape a single product page**:
 
 ```bash
-./gejiec meli --url "https://articulo.mercadolibre.com.mx/MLM-1411526559-silla-gamer-reclinable-giratoria-ergonomica-super-comoda-_JM"
+./gejiec scrape-products --url "https://articulo.mercadolibre.com.mx/MLM-1411526559-silla-gamer-reclinable-giratoria-ergonomica-super-comoda-_JM"
 ```
 
 - **Only fetch product images from a product page**:
 
 ```bash
-./gejiec meli --url "https://articulo.mercadolibre.com.mx/MLM-1411526559-..." --only-images
+./gejiec scrape-products --url "https://articulo.mercadolibre.com.mx/MLM-1411526559-..." --only-images
 ```
 
 - **Scrape a search/listing page (auto-paginates) and limit items**:
 
 ```bash
-./gejiec meli --url "https://listado.mercadolibre.com.mx/carburador-stihl" --max-items 5
+./gejiec scrape-products --url "https://listado.mercadolibre.com.mx/carburador-stihl" --max-items 5
 ```
 
 - **Create a CSV from a listing scrape**:
 
 ```bash
-./gejiec meli --url "https://listado.mercadolibre.com.mx/carburador-stihl" --max-items 20 --create-csv
+./gejiec scrape-products --url "https://listado.mercadolibre.com.mx/carburador-stihl" --max-items 20 --create-csv
 ```
 
 - **Run headless (no browser window)**:
 
 ```bash
-./gejiec meli --url "https://listado.mercadolibre.com.mx/carburador-stihl" --headless
+./gejiec scrape-products --url "https://listado.mercadolibre.com.mx/carburador-stihl" --headless
 ```
 
 Available flags for `meli`:
@@ -60,3 +60,8 @@ Available flags for `meli`:
 - `--only-images` (bool): Only scrape image URLs from a product page.
 - `--create-csv` (bool): Write scraped listing products to a CSV file.
 - `--headless` (bool): Run browser automation in headless mode.
+
+## Feature Roadmap
+
+- add product stats using Go and example `python-notebooks`
+- add support residential proxies

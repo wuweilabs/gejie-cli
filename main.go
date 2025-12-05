@@ -9,6 +9,7 @@ import (
 	"github.com/playwright-community/playwright-go"
 	"github.com/zshanhui/gejiezhipin/cli"
 	gejie "github.com/zshanhui/gejiezhipin/gejielib"
+	br "github.com/zshanhui/gejiezhipin/gejielib/browser"
 	"github.com/zshanhui/gejiezhipin/gejielib/zhipin"
 	utils "github.com/zshanhui/gejiezhipin/utils"
 )
@@ -31,7 +32,7 @@ func devTest() {
 		return
 	}
 
-	opts := gejie.CmdOptions{
+	opts := br.CmdOptions{
 		MaxItems:     10,
 		OnlyImages:   false,
 		CreateCsv:    false,
@@ -61,14 +62,14 @@ func devTest() {
 
 	} else if len(os.Args) > 1 && os.Args[1] == "--meli-product-links" {
 		searchUrlPe := "https://listado.mercadolibre.com.pe/teclado-mecanico"
-		bm, _ := gejie.NewBrowserManager(gejie.DefaultBrowserOptions(), opts)
+		bm, _ := br.NewBrowserManager(br.DefaultBrowserOptions(), opts)
 		page, _ := bm.NewPage()
 		page.Goto(searchUrlPe, playwright.PageGotoOptions{
 			Timeout: playwright.Float(8000),
 		})
 
 		slog.Info("test scraping product links...")
-		productLinks := gejie.ScrapeProductLinksWithPagination(page, opts.MaxItems)
+		productLinks := gejie.ScrapeProductLinksWithPaginationHelper(page, opts.MaxItems)
 		for _, productLink := range productLinks {
 			slog.Info("product link", "url", productLink)
 		}
