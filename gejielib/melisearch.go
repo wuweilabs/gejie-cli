@@ -103,7 +103,7 @@ func RunMeliSearch(searchUrl *string, opts br.CmdOptions) []meli.GejieProductLis
 			}
 			urlFrontier.MarkVisited(ur)
 			// prd := meli.ScrapeProductPageDummy(browser, ur)
-			prd := scrapeProductPage(browser, ur)
+			prd := ScrapeProductPage(browser, ur)
 			if prd != nil {
 				results <- *prd
 			} else {
@@ -163,12 +163,20 @@ func ScrapeProductPageDirect(url string, opts br.CmdOptions) *meli.GejieProductL
 	}, opts)
 	if err != nil {
 		slog.Error("could not create browser manager", "error", err)
+		return nil
 	}
 
-	return scrapeProductPage(bm.GetBrowser(), url)
+	return ScrapeProductPage(bm.GetBrowser(), url)
 }
 
-func scrapeProductPage(browser playwright.Browser, url string) *meli.GejieProductListing {
+type ScrapeProductDetailPageOpts struct {
+	Site                  br.SupportedCommerceSite
+	ReviewsRatingSelector string
+	reviewsCountSelector  string
+	nameSelector          string
+}
+
+func ScrapeProductPage(browser playwright.Browser, url string) *meli.GejieProductListing {
 	gejieConfig := br.DefaultGejieConfig()
 	productTimer := utils.NewTimer("Individual Product Page")
 	defer productTimer.LogElapsed()
@@ -290,11 +298,13 @@ func scrapeProductPage(browser playwright.Browser, url string) *meli.GejieProduc
 
 	content := scrapeProductDescription(productPage)
 
+	amountTotal := amountInt + amountCentsInt
 	product := meli.GejieProductListing{
 		Title: productName,
 		Price: meli.Price{
-			AmountCents:  amountInt + amountCentsInt,
-			CurrencyCode: curCode,
+			AmountCentsMin: amountTotal,
+			AmountCentsMax: amountTotal,
+			CurrencyCode:   curCode,
 		},
 		// to be filled in later
 		Url:         url,

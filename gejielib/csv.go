@@ -102,7 +102,8 @@ func CreateProductCsv(products []meli.GejieProductListing, baseFilename string, 
 			soldMoreThan = strconv.FormatUint(uint64(*product.SoldMoreThan), 10)
 		}
 
-		amountDecimal := float32(product.Price.AmountCents) / 100
+		mediumPrice := (product.Price.AmountCentsMax + product.Price.AmountCentsMin) / 2
+		amountDecimal := float32(mediumPrice) / 100
 		oCurrencyAmount := fmt.Sprintf("%.2f", amountDecimal)
 		//  only Peruvian Soles is supported for now
 		usdPriceAmount := fmt.Sprintf("%.2f", amountDecimal*float32(PeruvianSolUsdRate))

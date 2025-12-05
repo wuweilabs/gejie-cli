@@ -106,7 +106,27 @@ func RunDhgateSearch(searchUrl *string, opts br.CmdOptions) []meli.GejieProductL
 	return []meli.GejieProductListing{}
 }
 
-func ScrapeDhgateProductPage(br playwright.Browser, url string) *meli.GejieProductListing {
+// TODO dry this up
+func ScrapeDhgateProductPageDirect(url string, opts br.CmdOptions) *meli.GejieProductListing {
+	bm, err := br.NewBrowserManager(&br.BrowserOptions{
+		Headless:    opts.HeadlessMode,
+		BlockImages: false,
+		BlockMedia:  false,
+		BlockFonts:  false,
+	}, opts)
+	if err != nil {
+		slog.Error("could not create browser manager", "error", err)
+		return nil
+	}
+
+	return scrapeProductPage(bm.GetBrowser(), url)
+}
+
+func scrapeProductPage(br playwright.Browser, url string) *meli.GejieProductListing {
 
 	return &meli.GejieProductListing{}
+}
+
+func ScrapeProductImages(br playwright.Browser, url string) []string {
+	return []string{}
 }

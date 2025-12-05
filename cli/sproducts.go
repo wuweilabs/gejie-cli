@@ -70,7 +70,7 @@ func routeSiteProductUrl(url string, opts br.CmdOptions) {
 	switch opts.Site {
 	case br.MercadoLibre:
 		slog.Info("route handle dhgate products search")
-		RouteMeli(url, opts)
+		RouteMercadoLibre(url, opts)
 	case br.DHGate:
 		slog.Info("route handle dhgate products search")
 		RouteDhgate(url, opts)
@@ -85,11 +85,11 @@ type RouteOptions struct {
 	productUrlPrefixes      []string
 	listUrlPrefixes         []string
 	scrapeProductImages     func(page playwright.Page, url string) []string
-	scrapeProductPageDirect func(url string, opts br.CmdOptions) *meli.MeliProduct
-	runSearch               func(searchUrl *string, opts br.CmdOptions) []meli.MeliProduct
+	scrapeProductPageDirect func(url string, opts br.CmdOptions) *meli.GejieProductListing
+	runSearch               func(searchUrl *string, opts br.CmdOptions) []meli.GejieProductListing
 }
 
-func RouteMeli(url string, opts br.CmdOptions) {
+func RouteMercadoLibre(url string, opts br.CmdOptions) {
 	productUrlPrefixes := []string{"https://www.mercadolibre", "https://articulo.mercadolibre", "mercadolibre"}
 	listUrlPrefixes := []string{"https://listado.mercadolibre", "listado.mercadolibre"}
 

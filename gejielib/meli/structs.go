@@ -8,8 +8,9 @@ import (
 )
 
 type Price struct {
-	AmountCents  int
-	CurrencyCode utils.CurrencyCode
+	AmountCentsMin int
+	AmountCentsMax int
+	CurrencyCode   utils.CurrencyCode
 }
 
 type GejieProductListing struct {
@@ -40,8 +41,11 @@ func ScrapeProductPageDummy(browser playwright.Browser, url string) *GejieProduc
 	soldMoreThan := uint32(50)
 	estimatedSold := uint32(75)
 	return &GejieProductListing{
-		Title:              "Sample Product Title",
-		Price:              Price{AmountCents: 1999, CurrencyCode: utils.CurrencyCode("USD")},
+		Title: "Sample Product Title",
+		Price: Price{
+			AmountCentsMin: 1999,
+			AmountCentsMax: 1999,
+			CurrencyCode:   utils.CurrencyCode("USD")},
 		Url:                url,
 		ReviewCount:        &reviewCount,
 		Rating:             &reviewScore,
